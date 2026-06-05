@@ -10,6 +10,14 @@ export const metadata: Metadata = {
   title: "Finza",
   description: "Tu app de finanzas personales",
   manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    title: "Finza",
+    statusBarStyle: "black-translucent",
+  },
+  icons: {
+    apple: "/apple-touch-icon.png",
+  },
 };
 
 export const viewport: Viewport = {
