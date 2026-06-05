@@ -96,10 +96,9 @@ function buildBillingGroups(
   });
 }
 
-/** Días hasta el vencimiento (negativo = ya venció).
- *  El vencimiento siempre cae en el mes siguiente al mes de cierre del resumen. */
+/** Días hasta el vencimiento (negativo = ya venció). */
 function daysUntilDue(billingMonth: number, billingYear: number, dueDay: number): number {
-  const { dueMonth, dueYear } = getDueMonthYear(billingMonth, billingYear);
+  const { dueMonth, dueYear } = getDueMonthYear(billingMonth, billingYear, dueDay);
   const now = new Date();
   const due = new Date(dueYear, dueMonth, dueDay);
   return Math.round((due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
@@ -240,7 +239,7 @@ function BillingGroupCard({
                 ) : (
                   <Badge variant="outline" className="text-[10px] h-4 px-1.5 gap-1 text-muted-foreground">
                     <Calendar className="h-2.5 w-2.5" />
-                    Vence el {group.dueDay} de {getMonthName(getDueMonthYear(group.billingMonth, group.billingYear).dueMonth)}
+                    Vence el {group.dueDay} de {getMonthName(getDueMonthYear(group.billingMonth, group.billingYear, group.dueDay).dueMonth)}
                   </Badge>
                 )}
               </div>

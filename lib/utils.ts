@@ -33,12 +33,23 @@ export function formatDate(date: string | Date): string {
 /**
  * Calcula a qué período de resumen corresponde un gasto de TC.
  *
- * Regla:
- *   - expenseDay <= closingDay  → resumen del mes de la fecha (billingMonth = month del gasto)
- *   - expenseDay >  closingDay  → resumen del mes siguiente
+ * Regla según el día de cierre:
+ *   - closingDay < 15  → el cierre cae en el mes SIGUIENTE al mes del resumen.
+ *     · expenseDay <  closingDay → resumen del mes ANTERIOR al del gasto
+ *     · expenseDay >= closingDay → resumen del mes del gasto
  *
- * El "billingMonth/Year" es el mes al que pertenece el resumen
- * (que se paga en due_day de ese mismo mes, según la conv. del Excel).
+ *   - closingDay >= 15 → el cierre cae en el mismo mes del resumen.
+ *     · expenseDay <  closingDay → resumen del mes del gasto
+ *     · expenseDay >= closingDay → resumen del mes SIGUIENTE al del gasto
+ *
+ * Ejemplo A: cierre=2  (< 15, cae en mes siguiente)
+ *   Gasto 1-julio  (day=1  < 2)  → resumen Junio  ✓
+ *   Gasto 2-julio  (day=2  >= 2) → resumen Julio  ✓
+ *   Gasto 15-junio (day=15 >= 2) → resumen Junio  ✓
+ *
+ * Ejemplo B: cierre=28 (>= 15, cae en el mismo mes)
+ *   Gasto 27-junio (day=27 < 28)  → resumen Junio  ✓
+ *   Gasto 28-junio (day=28 >= 28) → resumen Julio  ✓
  */
 export function getBillingPeriod(
   expenseDate: string,
@@ -46,12 +57,23 @@ export function getBillingPeriod(
 ): { periodLabel: string; dueMonth: number; dueYear: number } {
   const date  = new Date(expenseDate + "T00:00:00");
   const day   = date.getDate();
-  let   month = date.getMonth();     // 0-indexed
+  let   month = date.getMonth();   // 0-indexed
   let   year  = date.getFullYear();
 
-  if (day >= closingDay) {
-    month += 1;
-    if (month > 11) { month = 0; year += 1; }
+  if (closingDay < 15) {
+    // El cierre está en el mes siguiente → si el gasto es antes del cierre
+    // pertenece al resumen del mes anterior.
+    if (day < closingDay) {
+      month -= 1;
+      if (month < 0) { month = 11; year -= 1; }
+    }
+  } else {
+    // El cierre está en el mismo mes → si el gasto es en/después del cierre
+    // pertenece al resumen del mes siguiente.
+    if (day >= closingDay) {
+      month += 1;
+      if (month > 11) { month = 0; year += 1; }
+    }
   }
 
   return {
@@ -62,19 +84,26 @@ export function getBillingPeriod(
 }
 
 /**
- * Dado el mes/año de CIERRE del resumen (billing), devuelve el mes/año de VENCIMIENTO.
- * El vencimiento siempre cae en el mes siguiente al cierre.
+ * Dado el mes/año de billing y el due_day, devuelve la fecha real de vencimiento.
  *
- * Ejemplo: billingMonth=5 (Junio), billingYear=2026
- *          → dueMonth=6 (Julio), dueYear=2026
+ * Regla:
+ *   - dueDay < 15  → el vencimiento cae en el mes SIGUIENTE al billing month
+ *   - dueDay >= 15 → el vencimiento cae en el mismo mes que el billing month
+ *
+ * Ejemplo: billingMonth=5 (Junio), dueDay=12 (< 15) → vence en Julio
+ *          billingMonth=5 (Junio), dueDay=20 (>=15) → vence en Junio
  */
 export function getDueMonthYear(
   billingMonth: number,
-  billingYear:  number
+  billingYear:  number,
+  dueDay:       number
 ): { dueMonth: number; dueYear: number } {
-  const dueMonth = (billingMonth + 1) % 12;
-  const dueYear  = billingMonth === 11 ? billingYear + 1 : billingYear;
-  return { dueMonth, dueYear };
+  if (dueDay < 15) {
+    const dueMonth = (billingMonth + 1) % 12;
+    const dueYear  = billingMonth === 11 ? billingYear + 1 : billingYear;
+    return { dueMonth, dueYear };
+  }
+  return { dueMonth: billingMonth, dueYear: billingYear };
 }
 
 export const MONTH_NAMES = [
