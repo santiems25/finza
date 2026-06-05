@@ -12,7 +12,7 @@ import { formatCurrency, formatDate, getMonthName, getDueMonthYear } from "@/lib
 import { markBillingAsPaid, unmarkBillingAsPaid } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import type {
-  CreditCard as CreditCardType, Expense, BillingPayment,
+  CreditCard as CreditCardType, CreditCardMonthlyConfig, Expense, BillingPayment,
   ExpenseCategory,
 } from "@/types";
 import { CATEGORY_LABELS, CATEGORY_ICONS, CATEGORY_COLORS, PAYMENT_METHOD_LABELS } from "@/types";
@@ -34,6 +34,7 @@ interface BillingGroup {
 interface Props {
   expenses: Expense[];
   cards: CreditCardType[];
+  monthlyConfigs: CreditCardMonthlyConfig[];
   billingPayments: BillingPayment[];
   onPaymentToggled: () => void;
 }
@@ -43,6 +44,7 @@ interface Props {
 function buildBillingGroups(
   expenses: Expense[],
   cards: CreditCardType[],
+  monthlyConfigs: CreditCardMonthlyConfig[],
   payments: BillingPayment[]
 ): BillingGroup[] {
   const map = new Map<string, BillingGroup>();
@@ -68,12 +70,21 @@ function buildBillingGroups(
           p.billing_month  === e.billing_month &&
           p.billing_year   === e.billing_year
       );
+      // Buscar override mensual para el due_day de este período
+      const override = monthlyConfigs.find(
+        mc =>
+          mc.credit_card_id === e.credit_card_id &&
+          mc.month === e.billing_month &&
+          mc.year  === e.billing_year
+      );
+      const dueDay = override?.due_day ?? card.due_day;
+
       map.set(key, {
         card,
         billingMonth: e.billing_month,
         billingYear:  e.billing_year,
         periodLabel:  e.billing_period,
-        dueDay:       card.due_day,
+        dueDay,
         expenses:     [],
         totalARS:     0,
         totalUSD:     0,
@@ -106,11 +117,11 @@ function daysUntilDue(billingMonth: number, billingYear: number, dueDay: number)
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 
-export function BillingSummaryTab({ expenses, cards, billingPayments, onPaymentToggled }: Props) {
+export function BillingSummaryTab({ expenses, cards, monthlyConfigs, billingPayments, onPaymentToggled }: Props) {
   const { toast } = useToast();
   const [loading, setLoading] = useState<string | null>(null);
 
-  const groups = buildBillingGroups(expenses, cards, billingPayments);
+  const groups = buildBillingGroups(expenses, cards, monthlyConfigs, billingPayments);
 
   const pending = groups.filter(g => !g.isPaid);
   const paid    = groups.filter(g => g.isPaid);

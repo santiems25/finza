@@ -256,6 +256,7 @@ export default function GastosPage() {
         <BillingSummaryTab
           expenses={expenses}
           cards={cards}
+          monthlyConfigs={monthlyConfigs}
           billingPayments={billingPayments}
           onPaymentToggled={load}
         />
