@@ -31,57 +31,41 @@ export function formatDate(date: string | Date): string {
 }
 
 /**
- * Given an expense date and the card's closing day,
- * returns the billing period start date (YYYY-MM-DD).
+ * Calcula a qué período de resumen corresponde un gasto de TC.
  *
- * Logic:
- *  - If expenseDay <= closingDay  → billing month = current month
- *    (period starts on closingDay+1 of PREVIOUS month)
- *  - If expenseDay > closingDay   → billing month = next month
- *    (period starts on closingDay+1 of CURRENT month)
+ * Regla:
+ *   - expenseDay <= closingDay  → resumen del mes de la fecha (billingMonth = month del gasto)
+ *   - expenseDay >  closingDay  → resumen del mes siguiente
+ *
+ * El "billingMonth/Year" es el mes al que pertenece el resumen
+ * (que se paga en due_day de ese mismo mes, según la conv. del Excel).
  */
 export function getBillingPeriod(
   expenseDate: string,
   closingDay: number
 ): { periodLabel: string; dueMonth: number; dueYear: number } {
-  const date = new Date(expenseDate + "T00:00:00");
-  const day = date.getDate();
-  const month = date.getMonth(); // 0-indexed
-  const year = date.getFullYear();
+  const date  = new Date(expenseDate + "T00:00:00");
+  const day   = date.getDate();
+  let   month = date.getMonth();     // 0-indexed
+  let   year  = date.getFullYear();
 
-  let billingMonth: number;
-  let billingYear: number;
-
-  if (day <= closingDay) {
-    // charge goes to current month's summary
-    billingMonth = month;
-    billingYear = year;
-  } else {
-    // charge goes to next month's summary
-    billingMonth = month + 1;
-    billingYear = year;
-    if (billingMonth > 11) {
-      billingMonth = 0;
-      billingYear += 1;
-    }
+  if (day > closingDay) {
+    month += 1;
+    if (month > 11) { month = 0; year += 1; }
   }
 
-  const monthNames = [
-    "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
-    "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
-  ];
-
   return {
-    periodLabel: `${monthNames[billingMonth]} ${billingYear}`,
-    dueMonth: billingMonth,
-    dueYear: billingYear,
+    periodLabel: `${MONTH_NAMES[month]} ${year}`,
+    dueMonth:    month,
+    dueYear:     year,
   };
 }
 
+export const MONTH_NAMES = [
+  "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+  "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
+];
+
 export function getMonthName(month: number): string {
-  const names = [
-    "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
-    "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
-  ];
-  return names[month];
+  return MONTH_NAMES[month] ?? "";
 }

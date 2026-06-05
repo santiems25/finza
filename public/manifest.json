@@ -1,22 +1,14 @@
 {
-  "name": "Finanzas Personales",
-  "short_name": "Finanzas",
-  "description": "Control de finanzas personales",
+  "name": "Finza — Finanzas Personales",
+  "short_name": "Finza",
+  "description": "Tu app de finanzas personales",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0f172a",
   "theme_color": "#0f172a",
   "orientation": "portrait",
   "icons": [
-    {
-      "src": "/icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png"
-    },
-    {
-      "src": "/icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png"
-    }
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }
   ]
 }

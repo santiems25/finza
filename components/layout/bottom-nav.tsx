@@ -4,9 +4,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LayoutDashboard, ListMinus, TrendingUp, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { FinzaLogo } from "./finza-logo";
 
 const navItems = [
-  { href: "/",              icon: LayoutDashboard, label: "Dashboard" },
+  { href: "/",              icon: LayoutDashboard, label: "Inicio"    },
   { href: "/gastos",        icon: ListMinus,       label: "Gastos"    },
   { href: "/inversiones",   icon: TrendingUp,      label: "Portafolio" },
   { href: "/configuracion", icon: Settings,        label: "Config"    },
@@ -26,9 +27,7 @@ export function BottomNav() {
               href={href}
               className={cn(
                 "flex flex-col items-center gap-1 flex-1 py-2 rounded-lg transition-colors",
-                active
-                  ? "text-primary"
-                  : "text-muted-foreground hover:text-foreground"
+                active ? "text-primary" : "text-muted-foreground hover:text-foreground"
               )}
             >
               <Icon className={cn("h-5 w-5 transition-all", active && "scale-110")} />

@@ -1,200 +1,357 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { CreditCard, Save, Info } from "lucide-react";
+import { useEffect, useState, useCallback } from "react";
+import { CreditCard, Pencil, Check, X, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { getCreditCards, upsertCreditCard } from "@/lib/supabase";
+import {
+  getCreditCards, upsertCreditCard,
+  getMonthlyConfigs, upsertMonthlyConfig, deleteMonthlyConfig,
+} from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
-import type { CreditCard as CreditCardType } from "@/types";
+import { FinzaLogo } from "@/components/layout/finza-logo";
+import { getMonthName } from "@/lib/utils";
+import type { CreditCard as CreditCardType, CreditCardMonthlyConfig } from "@/types";
+
+/** Devuelve los próximos `n` meses (incluyendo el actual) */
+function getMonthRange(pastMonths = 1, futureMonths = 5) {
+  const now = new Date();
+  const months: { month: number; year: number }[] = [];
+  for (let i = -pastMonths; i <= futureMonths; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+    months.push({ month: d.getMonth(), year: d.getFullYear() });
+  }
+  return months;
+}
 
 export default function ConfiguracionPage() {
-  const [cards, setCards] = useState<CreditCardType[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [cards, setCards]                   = useState<CreditCardType[]>([]);
+  const [monthlyConfigs, setMonthlyConfigs] = useState<CreditCardMonthlyConfig[]>([]);
+  const [loading, setLoading]               = useState(true);
   const { toast } = useToast();
 
-  useEffect(() => {
-    getCreditCards().then((c) => { setCards(c); setLoading(false); });
+  const load = useCallback(async () => {
+    const [c, mc] = await Promise.all([getCreditCards(), getMonthlyConfigs()]);
+    setCards(c);
+    setMonthlyConfigs(mc);
+    setLoading(false);
   }, []);
 
-  const handleSave = async (card: CreditCardType) => {
+  useEffect(() => { load(); }, [load]);
+
+  const handleSaveHabitual = async (card: CreditCardType) => {
     try {
       await upsertCreditCard(card);
-      toast({ title: `${card.name} actualizada` });
+      toast({ title: `✅ ${card.name} actualizada` });
+      load();
     } catch {
       toast({ title: "Error al guardar", variant: "destructive" });
     }
   };
 
+  const handleSaveMonthly = async (
+    cfg: Omit<CreditCardMonthlyConfig, "id" | "created_at">
+  ) => {
+    try {
+      await upsertMonthlyConfig(cfg);
+      toast({ title: "✅ Guardado" });
+      load();
+    } catch {
+      toast({ title: "Error al guardar", variant: "destructive" });
+    }
+  };
+
+  const handleDeleteMonthly = async (id: string) => {
+    try {
+      await deleteMonthlyConfig(id);
+      load();
+    } catch {
+      toast({ title: "Error al eliminar", variant: "destructive" });
+    }
+  };
+
   return (
-    <div className="px-4 pt-6">
+    <div className="px-4 pt-6 pb-8">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold tracking-tight">Configuración</h1>
-        <p className="text-muted-foreground text-sm">Ajustá tus tarjetas de crédito</p>
+        <h1 className="text-xl font-bold tracking-tight">Configuración</h1>
+        <p className="text-muted-foreground text-xs">Tarjetas de crédito</p>
       </div>
 
-      {/* Info box sobre la lógica */}
-      <Card className="mb-6 border-primary/20 bg-primary/5">
-        <CardContent className="p-4">
-          <div className="flex gap-3">
-            <Info className="h-4 w-4 text-primary shrink-0 mt-0.5" />
-            <div className="text-xs text-muted-foreground space-y-1">
-              <p><strong className="text-foreground">Día de cierre:</strong> Último día del período. Los gastos hasta ese día van al resumen del mes actual.</p>
-              <p><strong className="text-foreground">Día de vencimiento:</strong> Día del mes siguiente en que debés pagar el resumen.</p>
-              <p className="pt-1">Ejemplo: cierre el 5, vencimiento el 20. Un gasto del 3 de junio → resumen de Junio. Un gasto del 10 de junio → resumen de Julio.</p>
-            </div>
+      {/* Branding */}
+      <Card className="mb-5 border-0 bg-gradient-to-br from-blue-950/60 to-violet-950/60">
+        <CardContent className="p-4 flex items-center gap-4">
+          <FinzaLogo size="lg" />
+          <div>
+            <p className="text-xs text-muted-foreground">Versión 1.0</p>
+            <p className="text-xs text-muted-foreground">Finanzas personales</p>
           </div>
         </CardContent>
       </Card>
 
-      <div className="space-y-4">
-        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-          Tarjetas
-        </h2>
-        {loading ? (
-          <div className="space-y-3">
-            <div className="h-48 bg-muted/50 rounded-xl animate-pulse" />
-            <div className="h-48 bg-muted/50 rounded-xl animate-pulse" />
-          </div>
-        ) : (
-          cards.map((card) => (
-            <CreditCardEditor key={card.id} card={card} onSave={handleSave} />
-          ))
-        )}
-      </div>
-
-      <Separator className="my-8" />
-
-      {/* Info sobre billing */}
-      <div className="space-y-3 pb-6">
-        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-          Cómo funciona el resumen
-        </h2>
-        <BillingExampleCard />
-      </div>
+      {loading ? (
+        <div className="space-y-4">
+          {[0, 1].map(i => (
+            <div key={i} className="h-72 bg-muted/50 rounded-xl animate-pulse" />
+          ))}
+        </div>
+      ) : (
+        <div className="space-y-5">
+          {cards.map(card => (
+            <CardSection
+              key={card.id}
+              card={card}
+              monthlyConfigs={monthlyConfigs.filter(mc => mc.credit_card_id === card.id)}
+              onSaveHabitual={handleSaveHabitual}
+              onSaveMonthly={handleSaveMonthly}
+              onDeleteMonthly={handleDeleteMonthly}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
-function CreditCardEditor({
-  card,
-  onSave,
+// ─── CardSection ──────────────────────────────────────────────────────────────
+
+function CardSection({
+  card, monthlyConfigs, onSaveHabitual, onSaveMonthly, onDeleteMonthly,
 }: {
   card: CreditCardType;
-  onSave: (card: CreditCardType) => void;
+  monthlyConfigs: CreditCardMonthlyConfig[];
+  onSaveHabitual: (c: CreditCardType) => void;
+  onSaveMonthly: (cfg: Omit<CreditCardMonthlyConfig, "id" | "created_at">) => void;
+  onDeleteMonthly: (id: string) => void;
 }) {
-  const [closingDay, setClosingDay] = useState(card.closing_day.toString());
-  const [dueDay, setDueDay] = useState(card.due_day.toString());
-  const [saving, setSaving] = useState(false);
-
-  const isDirty =
-    parseInt(closingDay) !== card.closing_day || parseInt(dueDay) !== card.due_day;
-
-  const handleSave = async () => {
-    const cd = parseInt(closingDay);
-    const dd = parseInt(dueDay);
-    if (isNaN(cd) || cd < 1 || cd > 28 || isNaN(dd) || dd < 1 || dd > 28) return;
-    setSaving(true);
-    await onSave({ ...card, closing_day: cd, due_day: dd });
-    setSaving(false);
-  };
+  const months = getMonthRange(1, 5);
+  const now    = new Date();
 
   return (
     <Card>
       <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-base flex items-center gap-2">
-            <CreditCard className="h-4 w-4 text-primary" />
-            {card.name}
-          </CardTitle>
-          <Badge variant="outline" className="capitalize text-xs">
-            {card.card_type}
-          </Badge>
-        </div>
-        <CardDescription className="text-xs">
-          Configurá los días de cierre y vencimiento
-        </CardDescription>
+        <CardTitle className="text-base flex items-center gap-2.5">
+          <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center shrink-0">
+            <CreditCard className="h-3.5 w-3.5 text-white" />
+          </div>
+          {card.name}
+          <Badge variant="outline" className="capitalize text-xs ml-auto">{card.card_type}</Badge>
+        </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <Label className="text-xs mb-1.5 block">Día de cierre</Label>
-            <Input
-              type="number"
-              min="1"
-              max="28"
-              value={closingDay}
-              onChange={(e) => setClosingDay(e.target.value)}
-              inputMode="numeric"
-            />
-            <p className="text-xs text-muted-foreground mt-1">Día 1–28</p>
-          </div>
-          <div>
-            <Label className="text-xs mb-1.5 block">Día de vencimiento</Label>
-            <Input
-              type="number"
-              min="1"
-              max="28"
-              value={dueDay}
-              onChange={(e) => setDueDay(e.target.value)}
-              inputMode="numeric"
-            />
-            <p className="text-xs text-muted-foreground mt-1">Día 1–28</p>
-          </div>
-        </div>
 
-        {/* Preview */}
-        <div className="rounded-lg bg-muted/50 px-3 py-2 text-xs space-y-1">
-          <p className="text-muted-foreground">
-            Cierra el <strong className="text-foreground">{closingDay || "?"}</strong> de cada mes
-          </p>
-          <p className="text-muted-foreground">
-            Vence el <strong className="text-foreground">{dueDay || "?"}</strong> del mes siguiente
-          </p>
-        </div>
+      <CardContent className="pt-0 space-y-4">
+        {/* Días habituales */}
+        <HabitualDays card={card} onSave={onSaveHabitual} />
 
-        <Button
-          onClick={handleSave}
-          disabled={!isDirty || saving}
-          className="w-full gap-2"
-          size="sm"
-        >
-          <Save className="h-3.5 w-3.5" />
-          {saving ? "Guardando..." : "Guardar cambios"}
-        </Button>
+        <Separator />
+
+        {/* Meses */}
+        <div className="space-y-1.5">
+          {months.map(({ month, year }) => {
+            const isCurrent = month === now.getMonth() && year === now.getFullYear();
+            const override  = monthlyConfigs.find(mc => mc.month === month && mc.year === year);
+            return (
+              <MonthRow
+                key={`${year}-${month}`}
+                card={card}
+                month={month}
+                year={year}
+                isCurrent={isCurrent}
+                override={override}
+                onSave={onSaveMonthly}
+                onDelete={onDeleteMonthly}
+              />
+            );
+          })}
+        </div>
       </CardContent>
     </Card>
   );
 }
 
-function BillingExampleCard() {
+// ─── HabitualDays ─────────────────────────────────────────────────────────────
+
+function HabitualDays({
+  card,
+  onSave,
+}: {
+  card: CreditCardType;
+  onSave: (c: CreditCardType) => void;
+}) {
+  const [closingDay, setClosingDay] = useState(card.closing_day.toString());
+  const [dueDay,     setDueDay]     = useState(card.due_day.toString());
+  const [editing,   setEditing]     = useState(false);
+  const [saving,    setSaving]      = useState(false);
+
+  const isDirty = parseInt(closingDay) !== card.closing_day || parseInt(dueDay) !== card.due_day;
+
+  const handleSave = async () => {
+    const cd = parseInt(closingDay), dd = parseInt(dueDay);
+    if (!validDay(cd) || !validDay(dd)) return;
+    setSaving(true);
+    await onSave({ ...card, closing_day: cd, due_day: dd });
+    setSaving(false);
+    setEditing(false);
+  };
+
   return (
-    <Card className="bg-card/50">
-      <CardContent className="p-4 text-xs space-y-2 text-muted-foreground">
-        <p className="font-medium text-foreground">Ejemplo con cierre el día 5:</p>
-        <div className="space-y-1">
-          <div className="flex justify-between">
-            <span>Gasto el 3 de junio</span>
-            <span className="text-primary font-medium">→ Resumen Junio</span>
+    <div className="flex items-center justify-between gap-3 rounded-lg bg-muted/40 px-3 py-2.5">
+      {!editing ? (
+        <>
+          <div>
+            <p className="text-[10px] text-muted-foreground mb-0.5">Días habituales</p>
+            <p className="text-sm font-medium">
+              Cierre <strong>{card.closing_day}</strong> · Vence <strong>{card.due_day}</strong>
+            </p>
           </div>
-          <div className="flex justify-between">
-            <span>Gasto el 5 de junio</span>
-            <span className="text-primary font-medium">→ Resumen Junio</span>
+          <Button
+            variant="ghost" size="icon"
+            className="h-7 w-7 text-muted-foreground shrink-0"
+            onClick={() => setEditing(true)}
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </Button>
+        </>
+      ) : (
+        <div className="w-full space-y-2.5">
+          <p className="text-xs text-muted-foreground">Días habituales</p>
+          <div className="grid grid-cols-2 gap-2">
+            <DayInput label="Cierre" value={closingDay} onChange={setClosingDay} />
+            <DayInput label="Vencimiento" value={dueDay} onChange={setDueDay} />
           </div>
-          <div className="flex justify-between">
-            <span>Gasto el 6 de junio</span>
-            <span className="text-amber-400 font-medium">→ Resumen Julio</span>
-          </div>
-          <div className="flex justify-between">
-            <span>Gasto el 30 de junio</span>
-            <span className="text-amber-400 font-medium">→ Resumen Julio</span>
+          <div className="flex gap-2">
+            <Button size="sm" className="flex-1 h-7 text-xs gap-1" onClick={handleSave} disabled={!isDirty || saving}>
+              <Check className="h-3 w-3" />{saving ? "..." : "Guardar"}
+            </Button>
+            <Button size="sm" variant="outline" className="h-7 px-3" onClick={() => { setEditing(false); setClosingDay(card.closing_day.toString()); setDueDay(card.due_day.toString()); }}>
+              <X className="h-3 w-3" />
+            </Button>
           </div>
         </div>
-      </CardContent>
-    </Card>
+      )}
+    </div>
   );
 }
+
+// ─── MonthRow ─────────────────────────────────────────────────────────────────
+
+function MonthRow({
+  card, month, year, isCurrent, override, onSave, onDelete,
+}: {
+  card: CreditCardType;
+  month: number;
+  year: number;
+  isCurrent: boolean;
+  override?: CreditCardMonthlyConfig;
+  onSave: (cfg: Omit<CreditCardMonthlyConfig, "id" | "created_at">) => void;
+  onDelete: (id: string) => void;
+}) {
+  const displayClosing = override?.closing_day ?? card.closing_day;
+  const displayDue     = override?.due_day     ?? card.due_day;
+
+  const [editing,    setEditing]    = useState(false);
+  const [saving,     setSaving]     = useState(false);
+  const [closingDay, setClosingDay] = useState(displayClosing.toString());
+  const [dueDay,     setDueDay]     = useState(displayDue.toString());
+
+  // Sync cuando cambia override (tras reload)
+  useEffect(() => {
+    setClosingDay(displayClosing.toString());
+    setDueDay(displayDue.toString());
+  }, [displayClosing, displayDue]);
+
+  const handleSave = async () => {
+    const cd = parseInt(closingDay), dd = parseInt(dueDay);
+    if (!validDay(cd) || !validDay(dd)) return;
+    setSaving(true);
+    await onSave({ credit_card_id: card.id, month, year, closing_day: cd, due_day: dd });
+    setSaving(false);
+    setEditing(false);
+  };
+
+  const handleCancel = () => {
+    setClosingDay(displayClosing.toString());
+    setDueDay(displayDue.toString());
+    setEditing(false);
+  };
+
+  return (
+    <div className={`rounded-lg px-3 py-2.5 transition-colors ${
+      isCurrent ? "bg-primary/8 border border-primary/20" : "bg-muted/25"
+    }`}>
+      {!editing ? (
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-sm font-medium truncate">
+              {getMonthName(month)} {year}
+            </span>
+            {isCurrent && (
+              <Badge className="text-[10px] h-4 px-1.5 shrink-0">Actual</Badge>
+            )}
+          </div>
+          <div className="flex items-center gap-3 shrink-0">
+            <span className="text-xs text-muted-foreground">
+              Cierre <strong className="text-foreground">{displayClosing}</strong>
+              {" · "}
+              Vence <strong className="text-foreground">{displayDue}</strong>
+            </span>
+            <div className="flex gap-1">
+              <Button
+                variant="ghost" size="icon"
+                className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                onClick={() => setEditing(true)}
+              >
+                <Pencil className="h-3 w-3" />
+              </Button>
+              {override && (
+                <Button
+                  variant="ghost" size="icon"
+                  className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                  onClick={() => onDelete(override.id)}
+                >
+                  <Trash2 className="h-3 w-3" />
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-2.5">
+          <p className="text-xs font-medium">{getMonthName(month)} {year}</p>
+          <div className="grid grid-cols-2 gap-2">
+            <DayInput label="Cierre" value={closingDay} onChange={setClosingDay} />
+            <DayInput label="Vencimiento" value={dueDay} onChange={setDueDay} />
+          </div>
+          <div className="flex gap-2">
+            <Button size="sm" className="flex-1 h-7 text-xs gap-1" onClick={handleSave} disabled={saving}>
+              <Check className="h-3 w-3" />{saving ? "..." : "Guardar"}
+            </Button>
+            <Button size="sm" variant="outline" className="h-7 px-3" onClick={handleCancel}>
+              <X className="h-3 w-3" />
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── DayInput / helpers ───────────────────────────────────────────────────────
+
+function DayInput({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <div>
+      <Label className="text-[10px] mb-1 block text-muted-foreground">{label}</Label>
+      <Input
+        type="number" min="1" max="28"
+        value={value} onChange={e => onChange(e.target.value)}
+        inputMode="numeric" className="h-8 text-sm"
+      />
+    </div>
+  );
+}
+
+function validDay(d: number) { return !isNaN(d) && d >= 1 && d <= 28; }

@@ -7,8 +7,8 @@ import { Toaster } from "@/components/ui/toaster";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Finanzas",
-  description: "Control de finanzas personales",
+  title: "Finza",
+  description: "Tu app de finanzas personales",
   manifest: "/manifest.json",
 };
 
