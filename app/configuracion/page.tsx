@@ -373,10 +373,9 @@ function DayInput({ label, value, onChange }: { label: string; value: string; on
     <div>
       <Label className="text-[10px] mb-1 block text-muted-foreground">{label}</Label>
       <Input
-        type="number" min="1" max="28"
+        type="number" min="1" max="31"
         value={value} onChange={e => onChange(e.target.value)}
         inputMode="numeric" className="h-8 text-sm"
-        max="31"
       />
     </div>
   );
