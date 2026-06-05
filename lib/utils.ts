@@ -49,7 +49,7 @@ export function getBillingPeriod(
   let   month = date.getMonth();     // 0-indexed
   let   year  = date.getFullYear();
 
-  if (day > closingDay) {
+  if (day >= closingDay) {
     month += 1;
     if (month > 11) { month = 0; year += 1; }
   }
