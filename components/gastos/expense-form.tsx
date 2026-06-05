@@ -8,7 +8,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from "@/components/ui/select";
 import { addExpenses } from "@/lib/supabase";
-import { getBillingPeriod } from "@/lib/utils";
+import { getBillingPeriod, getMonthName } from "@/lib/utils";
 import type {
   CreditCard, CreditCardMonthlyConfig, Currency, ExpenseCategory, PaymentMethod
 } from "@/types";
@@ -230,9 +230,14 @@ export function ExpenseForm({ cards, monthlyConfigs, onSaved }: Props) {
                 {cards.map(card => {
                   const cd = resolveClosingDay(card, form.date, monthlyConfigs);
                   const isOverride = cd !== card.closing_day;
+                  // Mes real del cierre: si cd < 15 → mes siguiente, si >= 15 → mismo mes
+                  const expenseDate = new Date(form.date + "T00:00:00");
+                  const closingMonth = cd < 15
+                    ? new Date(expenseDate.getFullYear(), expenseDate.getMonth() + 1, 1).getMonth()
+                    : expenseDate.getMonth();
                   return (
                     <SelectItem key={card.id} value={card.id}>
-                      {card.name} · Cierra el {cd}{isOverride ? " *" : ""}
+                      {card.name} · Cierra el {cd} de {getMonthName(closingMonth)}{isOverride ? " *" : ""}
                     </SelectItem>
                   );
                 })}
