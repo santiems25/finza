@@ -24,6 +24,10 @@ CREATE TYPE income_source AS ENUM (
   'sueldo', 'freelance', 'alquiler', 'dividendos', 'bono', 'otros'
 );
 
+CREATE TYPE asset_type AS ENUM (
+  'accion', 'etf', 'cedear', 'bono', 'cripto', 'otro'
+);
+
 -- ─── TARJETAS DE CRÉDITO ──────────────────────────────────────────────────────
 
 CREATE TABLE credit_cards (
@@ -179,19 +183,26 @@ CREATE INDEX idx_incomes_date ON incomes (date DESC);
 CREATE INDEX idx_incomes_currency ON incomes (currency);
 
 -- ─── INVERSIONES (USD) ────────────────────────────────────────────────────────
+-- Cada fila es un lote de compra (lot). Se puede marcar como vendido.
 
 CREATE TABLE investments (
-  id         UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  ticker     TEXT NOT NULL,
-  quantity   NUMERIC(12, 4) NOT NULL CHECK (quantity  > 0),
-  buy_price  NUMERIC(12, 4) NOT NULL CHECK (buy_price > 0),
-  buy_date   DATE NOT NULL,
-  notes      TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
+  id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  ticker       TEXT NOT NULL,
+  asset_type   asset_type NOT NULL DEFAULT 'accion',
+  quantity     NUMERIC(12, 4) NOT NULL CHECK (quantity  > 0),
+  buy_price    NUMERIC(12, 4) NOT NULL CHECK (buy_price > 0),
+  buy_date     DATE NOT NULL,
+  -- Venta (null = posición activa)
+  is_sold      BOOLEAN NOT NULL DEFAULT false,
+  sell_price   NUMERIC(12, 4) CHECK (sell_price > 0),
+  sell_date    DATE,
+  notes        TEXT,
+  created_at   TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE INDEX idx_investments_ticker   ON investments (ticker);
 CREATE INDEX idx_investments_buy_date ON investments (buy_date DESC);
+CREATE INDEX idx_investments_is_sold  ON investments (is_sold);
 
 -- ─── ROW LEVEL SECURITY ───────────────────────────────────────────────────────
 
@@ -208,6 +219,22 @@ CREATE POLICY "allow_all" ON expenses                   FOR ALL USING (true) WIT
 CREATE POLICY "allow_all" ON billing_payments           FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "allow_all" ON incomes                    FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "allow_all" ON investments                FOR ALL USING (true) WITH CHECK (true);
+
+-- Vista: posiciones agrupadas por ticker (activas)
+CREATE VIEW portfolio_positions AS
+SELECT
+  ticker,
+  asset_type,
+  SUM(quantity)                                    AS total_qty,
+  SUM(quantity * buy_price)                        AS total_cost,
+  AVG(buy_price)                                   AS avg_buy_price,
+  MIN(buy_date)                                    AS first_buy_date,
+  MAX(buy_date)                                    AS last_buy_date,
+  COUNT(*)                                         AS lot_count
+FROM investments
+WHERE is_sold = false
+GROUP BY ticker, asset_type
+ORDER BY total_cost DESC;
 
 -- ─── VISTAS ───────────────────────────────────────────────────────────────────
 

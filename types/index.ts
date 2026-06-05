@@ -2,6 +2,8 @@ export type Currency = "ARS" | "USD";
 
 export type IncomeSource = "sueldo" | "freelance" | "alquiler" | "dividendos" | "bono" | "otros";
 
+export type AssetType = "accion" | "etf" | "cedear" | "bono" | "cripto" | "otro";
+
 export type PaymentMethod = "efectivo" | "debito" | "mercado_pago" | "credito";
 
 export type CardType = "visa" | "master";
@@ -61,19 +63,56 @@ export interface Income {
 export interface Investment {
   id: string;
   ticker: string;
+  asset_type: AssetType;
   quantity: number;
   buy_price: number;
   buy_date: string;
+  is_sold: boolean;
+  sell_price: number | null;
+  sell_date: string | null;
   notes: string | null;
   created_at: string;
 }
 
-export interface InvestmentWithPrice extends Investment {
+// Posición agrupada por ticker (suma de lotes activos)
+export interface Position {
+  ticker: string;
+  asset_type: AssetType;
+  totalQty: number;
+  totalCost: number;
+  avgBuyPrice: number;
+  firstBuyDate: string;
+  lots: Investment[];         // lotes individuales
+  // computed con precio actual:
   currentPrice: number | null;
   currentValue: number | null;
-  gainLoss: number | null;
-  gainLossPercent: number | null;
+  unrealizedPnL: number | null;
+  unrealizedPnLPct: number | null;
 }
+
+// Lote vendido con P&L realizado calculado
+export interface SoldLot extends Investment {
+  realizedPnL: number;
+  realizedPnLPct: number;
+}
+
+export const ASSET_TYPE_LABELS: Record<AssetType, string> = {
+  accion: "Acción",
+  etf:    "ETF",
+  cedear: "CEDEAR",
+  bono:   "Bono",
+  cripto: "Cripto",
+  otro:   "Otro",
+};
+
+export const ASSET_TYPE_COLORS: Record<AssetType, string> = {
+  accion: "bg-blue-500/15 text-blue-400",
+  etf:    "bg-violet-500/15 text-violet-400",
+  cedear: "bg-teal-500/15 text-teal-400",
+  bono:   "bg-amber-500/15 text-amber-400",
+  cripto: "bg-orange-500/15 text-orange-400",
+  otro:   "bg-slate-500/15 text-slate-400",
+};
 
 // Override de días de cierre/vencimiento para un mes específico
 export interface CreditCardMonthlyConfig {

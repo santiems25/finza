@@ -188,6 +188,18 @@ export async function addInvestment(investment: Omit<Investment, "id" | "created
   return data;
 }
 
+export async function sellInvestment(
+  id: string,
+  sell_price: number,
+  sell_date: string
+): Promise<void> {
+  const { error } = await supabase
+    .from("investments")
+    .update({ is_sold: true, sell_price, sell_date })
+    .eq("id", id);
+  if (error) throw error;
+}
+
 export async function deleteInvestment(id: string) {
   const { error } = await supabase.from("investments").delete().eq("id", id);
   if (error) throw error;
