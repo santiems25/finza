@@ -1,10 +1,32 @@
-import { createClient } from "@supabase/supabase-js";
-import type { CreditCard, CreditCardMonthlyConfig, Expense, Income, Investment, BillingPayment } from "@/types";
+import { createBrowserClient } from "@supabase/ssr";
+import type {
+  CreditCard, CreditCardMonthlyConfig, Expense,
+  Income, Investment, BillingPayment,
+} from "@/types";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+// Cliente browser — usa cookies para que el middleware pueda leer la sesión
+export const supabase = createBrowserClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// ─── Auth ─────────────────────────────────────────────────────────────────────
+
+export async function signIn(email: string, password: string) {
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) throw error;
+  return data;
+}
+
+export async function signOut() {
+  const { error } = await supabase.auth.signOut();
+  if (error) throw error;
+}
+
+export async function getSession() {
+  const { data: { session } } = await supabase.auth.getSession();
+  return session;
+}
 
 // ─── Credit Cards ─────────────────────────────────────────────────────────────
 
@@ -25,51 +47,6 @@ export async function upsertCreditCard(card: Partial<CreditCard> & { id?: string
     .single();
   if (error) throw error;
   return data;
-}
-
-// ─── Expenses ─────────────────────────────────────────────────────────────────
-
-export async function getExpenses(filters?: {
-  from?: string;
-  to?: string;
-  category?: string;
-  payment_method?: string;
-}): Promise<Expense[]> {
-  let query = supabase
-    .from("expenses")
-    .select("*")
-    .order("date", { ascending: false });
-  if (filters?.from) query = query.gte("date", filters.from);
-  if (filters?.to) query = query.lte("date", filters.to);
-  if (filters?.category) query = query.eq("category", filters.category);
-  if (filters?.payment_method) query = query.eq("payment_method", filters.payment_method);
-  const { data, error } = await query;
-  if (error) throw error;
-  return data ?? [];
-}
-
-export async function addExpense(expense: Omit<Expense, "id" | "created_at">) {
-  const { data, error } = await supabase
-    .from("expenses")
-    .insert(expense)
-    .select()
-    .single();
-  if (error) throw error;
-  return data;
-}
-
-export async function addExpenses(expenses: Omit<Expense, "id" | "created_at">[]) {
-  const { data, error } = await supabase
-    .from("expenses")
-    .insert(expenses)
-    .select();
-  if (error) throw error;
-  return data;
-}
-
-export async function deleteExpense(id: string) {
-  const { error } = await supabase.from("expenses").delete().eq("id", id);
-  if (error) throw error;
 }
 
 // ─── Monthly Card Config ──────────────────────────────────────────────────────
@@ -104,33 +81,57 @@ export async function deleteMonthlyConfig(id: string): Promise<void> {
   if (error) throw error;
 }
 
+// ─── Expenses ─────────────────────────────────────────────────────────────────
+
+export async function getExpenses(filters?: {
+  from?: string; to?: string; category?: string; payment_method?: string;
+}): Promise<Expense[]> {
+  let query = supabase.from("expenses").select("*").order("date", { ascending: false });
+  if (filters?.from) query = query.gte("date", filters.from);
+  if (filters?.to) query = query.lte("date", filters.to);
+  if (filters?.category) query = query.eq("category", filters.category);
+  if (filters?.payment_method) query = query.eq("payment_method", filters.payment_method);
+  const { data, error } = await query;
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function addExpense(expense: Omit<Expense, "id" | "created_at">) {
+  const { data, error } = await supabase.from("expenses").insert(expense).select().single();
+  if (error) throw error;
+  return data;
+}
+
+export async function addExpenses(expenses: Omit<Expense, "id" | "created_at">[]) {
+  const { data, error } = await supabase.from("expenses").insert(expenses).select();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteExpense(id: string) {
+  const { error } = await supabase.from("expenses").delete().eq("id", id);
+  if (error) throw error;
+}
+
 // ─── Billing Payments ─────────────────────────────────────────────────────────
 
 export async function getBillingPayments(): Promise<BillingPayment[]> {
-  const { data, error } = await supabase
-    .from("billing_payments")
-    .select("*");
+  const { data, error } = await supabase.from("billing_payments").select("*");
   if (error) throw error;
   return data ?? [];
 }
 
 export async function markBillingAsPaid(
-  creditCardId: string,
-  billingMonth: number,
-  billingYear: number
+  creditCardId: string, billingMonth: number, billingYear: number
 ): Promise<void> {
   const { error } = await supabase.from("billing_payments").upsert({
-    credit_card_id: creditCardId,
-    billing_month: billingMonth,
-    billing_year: billingYear,
+    credit_card_id: creditCardId, billing_month: billingMonth, billing_year: billingYear,
   });
   if (error) throw error;
 }
 
 export async function unmarkBillingAsPaid(
-  creditCardId: string,
-  billingMonth: number,
-  billingYear: number
+  creditCardId: string, billingMonth: number, billingYear: number
 ): Promise<void> {
   const { error } = await supabase
     .from("billing_payments")
@@ -153,11 +154,7 @@ export async function getIncomes(): Promise<Income[]> {
 }
 
 export async function addIncome(income: Omit<Income, "id" | "created_at">) {
-  const { data, error } = await supabase
-    .from("incomes")
-    .insert(income)
-    .select()
-    .single();
+  const { data, error } = await supabase.from("incomes").insert(income).select().single();
   if (error) throw error;
   return data;
 }
@@ -189,9 +186,7 @@ export async function addInvestment(investment: Omit<Investment, "id" | "created
 }
 
 export async function sellInvestment(
-  id: string,
-  sell_price: number,
-  sell_date: string
+  id: string, sell_price: number, sell_date: string
 ): Promise<void> {
   const { error } = await supabase
     .from("investments")

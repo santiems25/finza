@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { CreditCard, Pencil, Check, X, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { CreditCard, Pencil, Check, X, Trash2, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -11,6 +12,7 @@ import { Separator } from "@/components/ui/separator";
 import {
   getCreditCards, upsertCreditCard,
   getMonthlyConfigs, upsertMonthlyConfig, deleteMonthlyConfig,
+  signOut,
 } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import { FinzaLogo } from "@/components/layout/finza-logo";
@@ -29,10 +31,24 @@ function getMonthRange(pastMonths = 1, futureMonths = 5) {
 }
 
 export default function ConfiguracionPage() {
+  const router = useRouter();
   const [cards, setCards]                   = useState<CreditCardType[]>([]);
   const [monthlyConfigs, setMonthlyConfigs] = useState<CreditCardMonthlyConfig[]>([]);
   const [loading, setLoading]               = useState(true);
+  const [loggingOut, setLoggingOut]         = useState(false);
   const { toast } = useToast();
+
+  const handleLogout = async () => {
+    setLoggingOut(true);
+    try {
+      await signOut();
+      router.push("/login");
+      router.refresh();
+    } catch {
+      toast({ title: "Error al cerrar sesión", variant: "destructive" });
+      setLoggingOut(false);
+    }
+  };
 
   const load = useCallback(async () => {
     const [c, mc] = await Promise.all([getCreditCards(), getMonthlyConfigs()]);
@@ -91,6 +107,17 @@ export default function ConfiguracionPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Logout */}
+      <Button
+        variant="outline"
+        className="w-full gap-2 text-muted-foreground hover:text-destructive hover:border-destructive/50 mb-5"
+        onClick={handleLogout}
+        disabled={loggingOut}
+      >
+        <LogOut className="h-4 w-4" />
+        {loggingOut ? "Cerrando sesión..." : "Cerrar sesión"}
+      </Button>
 
       {loading ? (
         <div className="space-y-4">
