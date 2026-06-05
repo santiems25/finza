@@ -10,11 +10,13 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog";
 import { InvestmentForm } from "@/components/inversiones/investment-form";
+import { PortfolioChart } from "@/components/inversiones/portfolio-chart";
 import { SellDialog } from "@/components/inversiones/sell-dialog";
-import { getInvestments, deleteInvestment } from "@/lib/supabase";
+import { DividendsSection } from "@/components/inversiones/dividends-section";
+import { getInvestments, deleteInvestment, getDividends } from "@/lib/supabase";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
-import type { Investment, Position, SoldLot, AssetType } from "@/types";
+import type { Investment, Position, SoldLot, AssetType, Dividend } from "@/types";
 import { ASSET_TYPE_LABELS, ASSET_TYPE_COLORS } from "@/types";
 
 // ─── Tipos de filtro ──────────────────────────────────────────────────────────
@@ -77,6 +79,7 @@ export default function InversionesPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("activas");
   const [assetFilter, setAssetFilter]   = useState<AssetType | "todas">("todas");
   const [sellLot, setSellLot]           = useState<Investment | null>(null);
+  const [dividends, setDividends]       = useState<Dividend[]>([]);
   const { toast } = useToast();
 
   const fetchPrices = useCallback(async (invs: Investment[]) => {
@@ -92,8 +95,9 @@ export default function InversionesPage() {
   }, []);
 
   const load = useCallback(async () => {
-    const inv = await getInvestments();
+    const [inv, divs] = await Promise.all([getInvestments(), getDividends()]);
     setInvestments(inv);
+    setDividends(divs);
     await fetchPrices(inv);
     setLoading(false);
   }, [fetchPrices]);
@@ -126,7 +130,8 @@ export default function InversionesPage() {
   const unrealizedPnL    = totalValue - totalCost;
   const unrealizedPnLPct = totalCost > 0 ? (unrealizedPnL / totalCost) * 100 : 0;
   const realizedPnL      = soldLots.reduce((s, l) => s + l.realizedPnL, 0);
-  const totalPnL         = unrealizedPnL + realizedPnL;
+  const totalDividends   = dividends.reduce((s, d) => s + d.amount, 0);
+  const totalPnL         = unrealizedPnL + realizedPnL + totalDividends;
 
   // Benchmark SPY
   const spyPct = spyCurrent != null && spyStart != null && spyStart > 0
@@ -193,12 +198,25 @@ export default function InversionesPage() {
             unrealizedPnL={unrealizedPnL}
             unrealizedPnLPct={unrealizedPnLPct}
             realizedPnL={realizedPnL}
+            totalDividends={totalDividends}
             totalPnL={totalPnL}
             spyPct={spyPct}
             portfolioBeatsSpy={portfolioBeatsSpy}
             activeCount={positions.length}
             soldCount={soldLots.length}
           />
+
+          {/* ── Composición del portafolio ── */}
+          {positions.length > 0 && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-semibold">Composición</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <PortfolioChart positions={positions} />
+              </CardContent>
+            </Card>
+          )}
 
           {/* ── Filtros de tipo de asset ── */}
           {assetTypes.length > 1 && (
@@ -260,6 +278,13 @@ export default function InversionesPage() {
               ))}
             </div>
           )}
+
+          {/* ── Dividendos ── */}
+          <DividendsSection
+            dividends={dividends}
+            availableTickers={[...new Set(investments.map(i => i.ticker.toUpperCase()))]}
+            onChanged={load}
+          />
         </div>
       )}
 
@@ -287,11 +312,11 @@ export default function InversionesPage() {
 
 function PortfolioDashboard({
   totalCost, totalValue, unrealizedPnL, unrealizedPnLPct,
-  realizedPnL, totalPnL, spyPct, portfolioBeatsSpy, activeCount, soldCount,
+  realizedPnL, totalDividends, totalPnL, spyPct, portfolioBeatsSpy, activeCount, soldCount,
 }: {
   totalCost: number; totalValue: number;
   unrealizedPnL: number; unrealizedPnLPct: number;
-  realizedPnL: number; totalPnL: number;
+  realizedPnL: number; totalDividends: number; totalPnL: number;
   spyPct: number | null; portfolioBeatsSpy: boolean;
   activeCount: number; soldCount: number;
 }) {
@@ -327,13 +352,21 @@ function PortfolioDashboard({
           </div>
         </div>
 
-        {/* P&L realizado + SPY benchmark */}
+        {/* P&L realizado + dividendos + SPY benchmark */}
         <div className="grid grid-cols-2 gap-3">
           {soldCount > 0 && (
             <div className="rounded-lg bg-muted/40 px-3 py-2">
               <p className="text-[10px] text-muted-foreground mb-0.5">Realizado</p>
               <p className={`text-sm font-semibold ${realizedPnL >= 0 ? "text-emerald-400" : "text-destructive"}`}>
                 {realizedPnL >= 0 ? "+" : ""}{formatCurrency(realizedPnL, "USD")}
+              </p>
+            </div>
+          )}
+          {totalDividends > 0 && (
+            <div className="rounded-lg bg-muted/40 px-3 py-2">
+              <p className="text-[10px] text-muted-foreground mb-0.5">Dividendos</p>
+              <p className="text-sm font-semibold text-emerald-400">
+                +{formatCurrency(totalDividends, "USD")}
               </p>
             </div>
           )}
@@ -353,6 +386,14 @@ function PortfolioDashboard({
                   vs {spyPct.toFixed(1)}%
                 </span>
               </div>
+            </div>
+          )}
+          {(soldCount > 0 || totalDividends > 0) && (
+            <div className="rounded-lg bg-primary/10 border border-primary/20 px-3 py-2 col-span-2">
+              <p className="text-[10px] text-muted-foreground mb-0.5">Total (no real. + real. + dividendos)</p>
+              <p className={`text-sm font-semibold ${totalPnL >= 0 ? "text-emerald-400" : "text-destructive"}`}>
+                {totalPnL >= 0 ? "+" : ""}{formatCurrency(totalPnL, "USD")}
+              </p>
             </div>
           )}
         </div>

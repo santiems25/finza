@@ -50,6 +50,15 @@ export interface Expense {
   created_at: string;
 }
 
+export interface Dividend {
+  id: string;
+  ticker: string;
+  amount: number;   // USD
+  date: string;     // YYYY-MM-DD
+  notes: string | null;
+  created_at: string;
+}
+
 export interface Income {
   id: string;
   amount: number;

@@ -1,7 +1,7 @@
 import { createBrowserClient } from "@supabase/ssr";
 import type {
   CreditCard, CreditCardMonthlyConfig, Expense,
-  Income, Investment, BillingPayment,
+  Income, Investment, Dividend, BillingPayment,
 } from "@/types";
 
 // Cliente browser — usa cookies para que el middleware pueda leer la sesión
@@ -161,6 +161,32 @@ export async function addIncome(income: Omit<Income, "id" | "created_at">) {
 
 export async function deleteIncome(id: string) {
   const { error } = await supabase.from("incomes").delete().eq("id", id);
+  if (error) throw error;
+}
+
+// ─── Dividends ────────────────────────────────────────────────────────────────
+
+export async function getDividends(): Promise<Dividend[]> {
+  const { data, error } = await supabase
+    .from("dividends")
+    .select("*")
+    .order("date", { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function addDividend(dividend: Omit<Dividend, "id" | "created_at">) {
+  const { data, error } = await supabase
+    .from("dividends")
+    .insert(dividend)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteDividend(id: string) {
+  const { error } = await supabase.from("dividends").delete().eq("id", id);
   if (error) throw error;
 }
 
