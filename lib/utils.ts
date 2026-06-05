@@ -61,6 +61,22 @@ export function getBillingPeriod(
   };
 }
 
+/**
+ * Dado el mes/año de CIERRE del resumen (billing), devuelve el mes/año de VENCIMIENTO.
+ * El vencimiento siempre cae en el mes siguiente al cierre.
+ *
+ * Ejemplo: billingMonth=5 (Junio), billingYear=2026
+ *          → dueMonth=6 (Julio), dueYear=2026
+ */
+export function getDueMonthYear(
+  billingMonth: number,
+  billingYear:  number
+): { dueMonth: number; dueYear: number } {
+  const dueMonth = (billingMonth + 1) % 12;
+  const dueYear  = billingMonth === 11 ? billingYear + 1 : billingYear;
+  return { dueMonth, dueYear };
+}
+
 export const MONTH_NAMES = [
   "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
   "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",

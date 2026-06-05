@@ -2,6 +2,7 @@ import { createBrowserClient } from "@supabase/ssr";
 import type {
   CreditCard, CreditCardMonthlyConfig, Expense,
   Income, Investment, Dividend, BillingPayment,
+  SavingsConfig, FxTransaction,
 } from "@/types";
 
 // Cliente browser — usa cookies para que el middleware pueda leer la sesión
@@ -161,6 +162,51 @@ export async function addIncome(income: Omit<Income, "id" | "created_at">) {
 
 export async function deleteIncome(id: string) {
   const { error } = await supabase.from("incomes").delete().eq("id", id);
+  if (error) throw error;
+}
+
+// ─── Savings Config ───────────────────────────────────────────────────────────
+
+export async function getSavingsConfig(): Promise<SavingsConfig | null> {
+  const { data, error } = await supabase
+    .from("savings_config")
+    .select("*")
+    .single();
+  if (error) return null;
+  return data;
+}
+
+export async function updateSavingsConfig(
+  id: string,
+  values: { initial_ars: number; initial_usd: number }
+): Promise<void> {
+  const { error } = await supabase
+    .from("savings_config")
+    .update({ ...values, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+// ─── FX Transactions ──────────────────────────────────────────────────────────
+
+export async function getFxTransactions(): Promise<FxTransaction[]> {
+  const { data, error } = await supabase
+    .from("fx_transactions")
+    .select("*")
+    .order("date", { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function addFxTransaction(
+  tx: Omit<FxTransaction, "id" | "created_at">
+): Promise<void> {
+  const { error } = await supabase.from("fx_transactions").insert(tx);
+  if (error) throw error;
+}
+
+export async function deleteFxTransaction(id: string): Promise<void> {
+  const { error } = await supabase.from("fx_transactions").delete().eq("id", id);
   if (error) throw error;
 }
 

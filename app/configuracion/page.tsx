@@ -376,9 +376,10 @@ function DayInput({ label, value, onChange }: { label: string; value: string; on
         type="number" min="1" max="28"
         value={value} onChange={e => onChange(e.target.value)}
         inputMode="numeric" className="h-8 text-sm"
+        max="31"
       />
     </div>
   );
 }
 
-function validDay(d: number) { return !isNaN(d) && d >= 1 && d <= 28; }
+function validDay(d: number) { return !isNaN(d) && d >= 1 && d <= 31; }

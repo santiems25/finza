@@ -50,6 +50,23 @@ export interface Expense {
   created_at: string;
 }
 
+export interface SavingsConfig {
+  id: string;
+  initial_ars: number;
+  initial_usd: number;
+  updated_at: string;
+}
+
+export interface FxTransaction {
+  id: string;
+  ars_amount: number;
+  usd_amount: number;
+  exchange_rate: number;
+  date: string;
+  notes: string | null;
+  created_at: string;
+}
+
 export interface Dividend {
   id: string;
   ticker: string;

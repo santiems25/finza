@@ -8,7 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { formatCurrency, formatDate, getMonthName } from "@/lib/utils";
+import { formatCurrency, formatDate, getMonthName, getDueMonthYear } from "@/lib/utils";
 import { markBillingAsPaid, unmarkBillingAsPaid } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import type {
@@ -96,10 +96,12 @@ function buildBillingGroups(
   });
 }
 
-/** Días hasta el vencimiento (negativo = ya venció) */
+/** Días hasta el vencimiento (negativo = ya venció).
+ *  El vencimiento siempre cae en el mes siguiente al mes de cierre del resumen. */
 function daysUntilDue(billingMonth: number, billingYear: number, dueDay: number): number {
+  const { dueMonth, dueYear } = getDueMonthYear(billingMonth, billingYear);
   const now = new Date();
-  const due = new Date(billingYear, billingMonth, dueDay);
+  const due = new Date(dueYear, dueMonth, dueDay);
   return Math.round((due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 }
 
@@ -238,7 +240,7 @@ function BillingGroupCard({
                 ) : (
                   <Badge variant="outline" className="text-[10px] h-4 px-1.5 gap-1 text-muted-foreground">
                     <Calendar className="h-2.5 w-2.5" />
-                    Vence el {group.dueDay} de {getMonthName(group.billingMonth)}
+                    Vence el {group.dueDay} de {getMonthName(getDueMonthYear(group.billingMonth, group.billingYear).dueMonth)}
                   </Badge>
                 )}
               </div>
