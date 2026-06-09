@@ -8,7 +8,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from "@/components/ui/select";
 import { addExpenses } from "@/lib/supabase";
-import { getBillingPeriod, getMonthName } from "@/lib/utils";
+import { getBillingPeriod, getMonthName, parseAmount } from "@/lib/utils";
 import type {
   CreditCard, CreditCardMonthlyConfig, Currency, ExpenseCategory, PaymentMethod
 } from "@/types";
@@ -65,6 +65,8 @@ export function ExpenseForm({ cards, monthlyConfigs, onSaved }: Props) {
   const isCredit     = form.payment_method === "credito";
   const numCuotas    = Math.max(1, parseInt(form.installments) || 1);
   const selectedCard = cards.find(c => c.id === form.credit_card_id);
+  const totalAmount  = parseAmount(form.amount);
+  const perCuota     = numCuotas > 1 ? totalAmount / numCuotas : totalAmount;
 
   // Closing day efectivo para la fecha del formulario (usa override mensual si existe)
   const effectiveClosingDay = selectedCard
@@ -83,15 +85,14 @@ export function ExpenseForm({ cards, monthlyConfigs, onSaved }: Props) {
     setSaving(true);
 
     try {
-      const totalAmount = parseFloat(form.amount);
-      const perCuota    = parseFloat((totalAmount / numCuotas).toFixed(2));
+      const total    = parseAmount(form.amount);
+      const perCuota = parseFloat((total / numCuotas).toFixed(2));
 
-      // Generar N registros (uno por cuota)
+      // Generar N registros (uno por cuota).
+      // Cada cuota avanza 1 mes: así el trigger de Supabase calcula el billing
+      // period correcto para cada una.
       const records = Array.from({ length: numCuotas }, (_, i) => {
-        // Cada cuota cae en un billing period distinto (mes siguiente al anterior)
-        const expenseDate = isCredit
-          ? addMonths(form.date, i)    // la fecha "lógica" avanza 1 mes por cuota
-          : form.date;
+        const expenseDate = addMonths(form.date, i);
 
         let billing_period: string | null = null;
         let billing_month:  number | null = null;
@@ -110,7 +111,7 @@ export function ExpenseForm({ cards, monthlyConfigs, onSaved }: Props) {
           currency:           form.currency as Currency,
           description:        form.description,
           category:           form.category as ExpenseCategory,
-          date:               isCredit ? form.date : expenseDate, // fecha real siempre la original
+          date:               expenseDate,   // avanza 1 mes por cuota
           payment_method:     form.payment_method as PaymentMethod,
           credit_card_id:     isCredit && form.credit_card_id ? form.credit_card_id : null,
           billing_period,
@@ -136,9 +137,7 @@ export function ExpenseForm({ cards, monthlyConfigs, onSaved }: Props) {
         <div className="flex-1">
           <Label className="text-xs mb-1.5 block">Monto total</Label>
           <Input
-            type="number"
-            step="0.01"
-            min="0.01"
+            type="text"
             placeholder="0"
             value={form.amount}
             onChange={e => set("amount", e.target.value)}
@@ -274,7 +273,7 @@ export function ExpenseForm({ cards, monthlyConfigs, onSaved }: Props) {
               ) : (
                 <>
                   <p className="text-xs font-medium text-primary">
-                    {numCuotas} cuotas de {(parseFloat(form.amount || "0") / numCuotas).toLocaleString("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 })}
+                    {numCuotas} cuotas de {perCuota.toLocaleString("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 })}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     Desde <strong className="text-foreground">{firstPeriod.periodLabel}</strong> por {numCuotas} meses

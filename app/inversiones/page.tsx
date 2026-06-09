@@ -418,8 +418,11 @@ function PositionCard({
   return (
     <Card>
       <CardContent className="p-4">
-        {/* Header de posición */}
-        <div className="flex items-start gap-3">
+        {/* Header de posición — tap para expandir lotes */}
+        <div
+          className="flex items-start gap-3 cursor-pointer"
+          onClick={() => { if (pos.lots.length > 1) setExpanded(e => !e); }}
+        >
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="font-bold text-base font-mono">{pos.ticker}</span>
@@ -471,19 +474,26 @@ function PositionCard({
             )}
           </div>
 
-          {/* Acción de venta (lotes individuales) */}
-          <div className="flex flex-col gap-1 shrink-0">
+          {/* Acción de venta + indicador de expansión */}
+          <div className="flex flex-col gap-1 shrink-0 items-end" onClick={e => e.stopPropagation()}>
+            {pos.lots.length > 1 && (
+              <button
+                className="text-muted-foreground hover:text-foreground transition-colors"
+                onClick={() => setExpanded(e => !e)}
+              >
+                {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              </button>
+            )}
             <Button
               size="sm"
               variant="outline"
               className="h-7 text-xs"
               onClick={() => {
-                // Si hay un solo lote, vender directo. Si hay varios, expandir para elegir.
                 if (pos.lots.length === 1) { onSell(pos.lots[0]); }
                 else setExpanded(e => !e);
               }}
             >
-              {pos.lots.length === 1 ? "Vender" : (expanded ? "Cerrar" : "Vender")}
+              Vender
             </Button>
           </div>
         </div>

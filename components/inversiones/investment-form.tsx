@@ -8,7 +8,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { addInvestment } from "@/lib/supabase";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, parseAmount, parseQuantity } from "@/lib/utils";
 import type { AssetType } from "@/types";
 import { ASSET_TYPE_LABELS } from "@/types";
 
@@ -32,18 +32,25 @@ export function InvestmentForm({ onSaved }: Props) {
   const set = (field: string, value: string) =>
     setForm(prev => ({ ...prev, [field]: value }));
 
-  const cost = parseFloat(form.quantity || "0") * parseFloat(form.buy_price || "0");
+  const resolvedQty = parseQuantity(form.quantity);
+  const price       = parseAmount(form.buy_price);
+  const cost        = (resolvedQty ?? 0) * price;
+  // Si el usuario ingresó una fracción, mostramos el resultado
+  const qtyPreview  = form.quantity.includes("/") && resolvedQty != null
+    ? resolvedQty.toFixed(6).replace(/\.?0+$/, "")
+    : null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.ticker || !form.quantity || !form.buy_price) return;
+    if (resolvedQty == null || resolvedQty <= 0) return;
     setSaving(true);
     try {
       await addInvestment({
         ticker:     form.ticker.toUpperCase().trim(),
         asset_type: form.asset_type,
-        quantity:   parseFloat(form.quantity),
-        buy_price:  parseFloat(form.buy_price),
+        quantity:   resolvedQty,
+        buy_price:  price,
         buy_date:   form.buy_date,
         is_sold:    false,
         sell_price: null,
@@ -88,21 +95,24 @@ export function InvestmentForm({ onSaved }: Props) {
       {/* Cantidad + precio */}
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <Label className="text-xs mb-1.5 block">Cantidad</Label>
+          <Label className="text-xs mb-1.5 block">Cantidad <span className="text-muted-foreground">(ej: 2/120)</span></Label>
           <Input
-            type="number" step="0.0001" min="0.0001"
-            placeholder="10"
+            type="text"
+            placeholder="10 o 2/120"
             value={form.quantity}
             onChange={e => set("quantity", e.target.value)}
             inputMode="decimal"
             required
           />
+          {qtyPreview && (
+            <p className="text-[10px] text-primary mt-1">= {qtyPreview} acciones</p>
+          )}
         </div>
         <div>
           <Label className="text-xs mb-1.5 block">Precio (USD)</Label>
           <Input
-            type="number" step="0.0001" min="0.0001"
-            placeholder="150.00"
+            type="text"
+            placeholder="150,00"
             value={form.buy_price}
             onChange={e => set("buy_price", e.target.value)}
             inputMode="decimal"

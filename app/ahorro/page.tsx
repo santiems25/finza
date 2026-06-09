@@ -7,27 +7,31 @@ import {
   getSavingsConfig, updateSavingsConfig,
   getExpenses, getIncomes, getFxTransactions,
   addFxTransaction, deleteFxTransaction,
+  getBillingPayments,
 } from "@/lib/supabase";
-import type { SavingsConfig, Expense, Income, FxTransaction } from "@/types";
+import type { SavingsConfig, Expense, Income, FxTransaction, BillingPayment } from "@/types";
 
 export default function AhorroPage() {
-  const [config, setConfig]     = useState<SavingsConfig | null>(null);
-  const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [incomes, setIncomes]   = useState<Income[]>([]);
-  const [fxTxs, setFxTxs]       = useState<FxTransaction[]>([]);
-  const [loading, setLoading]   = useState(true);
+  const [config, setConfig]               = useState<SavingsConfig | null>(null);
+  const [expenses, setExpenses]           = useState<Expense[]>([]);
+  const [incomes, setIncomes]             = useState<Income[]>([]);
+  const [fxTxs, setFxTxs]                 = useState<FxTransaction[]>([]);
+  const [billingPayments, setBillingPayments] = useState<BillingPayment[]>([]);
+  const [loading, setLoading]             = useState(true);
 
   const load = useCallback(async () => {
-    const [cfg, exp, inc, fx] = await Promise.all([
+    const [cfg, exp, inc, fx, bp] = await Promise.all([
       getSavingsConfig(),
       getExpenses(),
       getIncomes(),
       getFxTransactions(),
+      getBillingPayments(),
     ]);
     setConfig(cfg);
     setExpenses(exp);
     setIncomes(inc);
     setFxTxs(fx);
+    setBillingPayments(bp);
     setLoading(false);
   }, []);
 
@@ -76,6 +80,7 @@ export default function AhorroPage() {
         expenses={expenses}
         incomes={incomes}
         fxTransactions={fxTxs}
+        billingPayments={billingPayments}
         onUpdateConfig={handleUpdateConfig}
         onAddFx={handleAddFx}
         onDeleteFx={handleDeleteFx}

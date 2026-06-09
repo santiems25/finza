@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import {
-  Pencil, Check, X, Plus, Trash2, ChevronDown, ChevronUp,
-  TrendingUp, TrendingDown, ArrowRightLeft, AlertTriangle,
+  Pencil, Check, X, Trash2, ChevronDown, ChevronUp,
+  ArrowRightLeft, AlertTriangle,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,8 +12,8 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { formatCurrency, formatDate } from "@/lib/utils";
-import type { SavingsConfig, Expense, Income, FxTransaction } from "@/types";
+import { formatCurrency, formatDate, parseAmount } from "@/lib/utils";
+import type { SavingsConfig, Expense, Income, FxTransaction, BillingPayment } from "@/types";
 
 const today = new Date().toISOString().split("T")[0];
 
@@ -22,6 +22,7 @@ interface Props {
   expenses: Expense[];
   incomes: Income[];
   fxTransactions: FxTransaction[];
+  billingPayments: BillingPayment[];
   onUpdateConfig: (ars: number, usd: number) => Promise<void>;
   onAddFx: (tx: Omit<FxTransaction, "id" | "created_at">) => Promise<void>;
   onDeleteFx: (id: string) => Promise<void>;
@@ -31,10 +32,19 @@ interface Props {
 const CASH_METHODS = ["efectivo", "debito", "mercado_pago"] as const;
 
 export function SavingsOverview({
-  config, expenses, incomes, fxTransactions,
+  config, expenses, incomes, fxTransactions, billingPayments,
   onUpdateConfig, onAddFx, onDeleteFx,
 }: Props) {
   const [fxOpen, setFxOpen] = useState(false);
+
+  // ── Helpers ─────────────────────────────────────────────────────────────────
+  const isTCPaid = (e: Expense) =>
+    billingPayments.some(
+      p =>
+        p.credit_card_id === e.credit_card_id &&
+        p.billing_month  === e.billing_month  &&
+        p.billing_year   === e.billing_year
+    );
 
   // ── Cálculo de saldos ───────────────────────────────────────────────────────
   const initialARS = config?.initial_ars ?? 0;
@@ -43,7 +53,7 @@ export function SavingsOverview({
   const incomeARS = incomes.filter(i => i.currency === "ARS").reduce((s, i) => s + i.amount, 0);
   const incomeUSD = incomes.filter(i => i.currency === "USD").reduce((s, i) => s + i.amount, 0);
 
-  // Solo gastos en cash (no crédito)
+  // Gastos en cash (no crédito)
   const cashExpARS = expenses
     .filter(e => e.currency === "ARS" && (CASH_METHODS as readonly string[]).includes(e.payment_method))
     .reduce((s, e) => s + e.amount, 0);
@@ -51,21 +61,28 @@ export function SavingsOverview({
     .filter(e => e.currency === "USD" && (CASH_METHODS as readonly string[]).includes(e.payment_method))
     .reduce((s, e) => s + e.amount, 0);
 
-  // FX
-  const fxARS = fxTransactions.reduce((s, t) => s + t.ars_amount, 0); // pesos gastados
-  const fxUSD = fxTransactions.reduce((s, t) => s + t.usd_amount, 0); // dólares comprados
+  // TC pagados → se descuentan del saldo
+  const paidTC_ARS = expenses
+    .filter(e => e.currency === "ARS" && e.payment_method === "credito" && isTCPaid(e))
+    .reduce((s, e) => s + e.amount, 0);
+  const paidTC_USD = expenses
+    .filter(e => e.currency === "USD" && e.payment_method === "credito" && isTCPaid(e))
+    .reduce((s, e) => s + e.amount, 0);
 
-  // TC pendiente (crédito no pagado)
+  // TC pendientes (no pagados) → solo para el aviso
   const pendingTC_ARS = expenses
-    .filter(e => e.currency === "ARS" && e.payment_method === "credito")
+    .filter(e => e.currency === "ARS" && e.payment_method === "credito" && !isTCPaid(e))
     .reduce((s, e) => s + e.amount, 0);
   const pendingTC_USD = expenses
-    .filter(e => e.currency === "USD" && e.payment_method === "credito")
+    .filter(e => e.currency === "USD" && e.payment_method === "credito" && !isTCPaid(e))
     .reduce((s, e) => s + e.amount, 0);
 
-  const balanceARS = initialARS + incomeARS - cashExpARS - fxARS;
-  const balanceUSD = initialUSD + incomeUSD - cashExpUSD + fxUSD;
+  // FX
+  const fxARS = fxTransactions.reduce((s, t) => s + t.ars_amount, 0);
+  const fxUSD = fxTransactions.reduce((s, t) => s + t.usd_amount, 0);
 
+  const balanceARS   = initialARS + incomeARS - cashExpARS - fxARS - paidTC_ARS;
+  const balanceUSD   = initialUSD + incomeUSD - cashExpUSD + fxUSD - paidTC_USD;
   const projectedARS = balanceARS - pendingTC_ARS;
   const projectedUSD = balanceUSD - pendingTC_USD;
 
@@ -76,10 +93,6 @@ export function SavingsOverview({
         currency="ARS"
         balance={balanceARS}
         projected={projectedARS}
-        initial={initialARS}
-        incomes={incomeARS}
-        cashExpenses={cashExpARS}
-        fxOut={fxARS}
         pendingTC={pendingTC_ARS}
         config={config}
         onUpdateConfig={onUpdateConfig}
@@ -90,10 +103,6 @@ export function SavingsOverview({
         currency="USD"
         balance={balanceUSD}
         projected={projectedUSD}
-        initial={initialUSD}
-        incomes={incomeUSD}
-        cashExpenses={cashExpUSD}
-        fxIn={fxUSD}
         pendingTC={pendingTC_USD}
         config={config}
         onUpdateConfig={onUpdateConfig}
@@ -132,33 +141,27 @@ export function SavingsOverview({
 // ─── SaldoCard ────────────────────────────────────────────────────────────────
 
 function SaldoCard({
-  currency, balance, projected, initial, incomes, cashExpenses,
-  fxOut, fxIn, pendingTC, config, onUpdateConfig,
+  currency, balance, projected, pendingTC, config, onUpdateConfig,
 }: {
   currency: "ARS" | "USD";
   balance: number;
   projected: number;
-  initial: number;
-  incomes: number;
-  cashExpenses: number;
-  fxOut?: number;
-  fxIn?: number;
   pendingTC: number;
   config: SavingsConfig | null;
   onUpdateConfig: (ars: number, usd: number) => Promise<void>;
 }) {
   const [editInitial, setEditInitial] = useState(false);
-  const [initialInput, setInitialInput] = useState(initial.toString());
+  const [initialInput, setInitialInput] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const isARS = currency === "ARS";
-  const label = isARS ? "Pesos (ARS)" : "Dólares (USD)";
+  const isARS     = currency === "ARS";
+  const label     = isARS ? "Pesos (ARS)" : "Dólares (USD)";
   const isPositive = balance >= 0;
   const hasPending = pendingTC > 0;
 
   const handleSaveInitial = async () => {
     if (!config) return;
-    const val = parseFloat(initialInput);
+    const val = parseAmount(initialInput);
     if (isNaN(val) || val < 0) return;
     setSaving(true);
     await onUpdateConfig(
@@ -179,102 +182,62 @@ function SaldoCard({
           </p>
           <button
             className="text-muted-foreground hover:text-foreground transition-colors"
-            onClick={() => { setEditInitial(e => !e); setInitialInput(initial.toString()); }}
+            onClick={() => {
+              const initial = isARS ? (config?.initial_ars ?? 0) : (config?.initial_usd ?? 0);
+              setInitialInput(initial.toString());
+              setEditInitial(e => !e);
+            }}
           >
             <Pencil className="h-3.5 w-3.5" />
           </button>
         </div>
 
         {/* Saldo principal */}
-        <div>
-          <p className={`text-3xl font-bold ${isPositive ? "" : "text-destructive"}`}>
-            {formatCurrency(balance, currency)}
-          </p>
-          {hasPending && (
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Proyectado (sin TC pendiente):{" "}
-              <span className={projected >= 0 ? "text-amber-400" : "text-destructive"}>
-                {formatCurrency(projected, currency)}
-              </span>
-            </p>
-          )}
-        </div>
+        <p className={`text-3xl font-bold ${isPositive ? "" : "text-destructive"}`}>
+          {formatCurrency(balance, currency)}
+        </p>
 
-        <Separator />
+        {/* Edit saldo inicial inline */}
+        {editInitial && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground shrink-0">Saldo inicial</span>
+            <Input
+              type="text"
+              value={initialInput}
+              onChange={e => setInitialInput(e.target.value)}
+              className="h-7 text-xs flex-1"
+              inputMode="decimal"
+              autoFocus
+            />
+            <button onClick={handleSaveInitial} disabled={saving} className="text-primary hover:text-primary/80">
+              <Check className="h-4 w-4" />
+            </button>
+            <button onClick={() => setEditInitial(false)} className="text-muted-foreground hover:text-foreground">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
 
-        {/* Desglose */}
-        <div className="space-y-1.5 text-xs">
-          {/* Saldo inicial */}
-          {editInitial ? (
-            <div className="flex items-center gap-2 py-1">
-              <span className="text-muted-foreground w-24 shrink-0">Saldo inicial</span>
-              <Input
-                type="number" min="0" step="0.01"
-                value={initialInput}
-                onChange={e => setInitialInput(e.target.value)}
-                className="h-7 text-xs flex-1"
-                inputMode="decimal"
-                autoFocus
-              />
-              <button onClick={handleSaveInitial} disabled={saving} className="text-primary hover:text-primary/80">
-                <Check className="h-4 w-4" />
-              </button>
-              <button onClick={() => setEditInitial(false)} className="text-muted-foreground hover:text-foreground">
-                <X className="h-4 w-4" />
-              </button>
+        {/* TC pendiente */}
+        {hasPending && (
+          <div className="flex items-center justify-between rounded-md bg-amber-500/10 border border-amber-500/20 px-2 py-1.5">
+            <span className="flex items-center gap-1.5 text-amber-400 text-xs">
+              <AlertTriangle className="h-3 w-3" />
+              TC pendiente de pago
+            </span>
+            <div className="text-right">
+              <p className="text-amber-400 font-medium text-xs">− {formatCurrency(pendingTC, currency)}</p>
+              <p className="text-[10px] text-muted-foreground">
+                Proyectado:{" "}
+                <span className={projected >= 0 ? "text-amber-400" : "text-destructive"}>
+                  {formatCurrency(projected, currency)}
+                </span>
+              </p>
             </div>
-          ) : (
-            <DesgloseLine label="Saldo inicial" value={initial} currency={currency} neutral />
-          )}
-
-          {incomes > 0 && (
-            <DesgloseLine label="+ Ingresos" value={incomes} currency={currency} positive />
-          )}
-          {cashExpenses > 0 && (
-            <DesgloseLine label="− Gastos (efectivo/débito/MP)" value={cashExpenses} currency={currency} negative />
-          )}
-          {fxOut != null && fxOut > 0 && (
-            <DesgloseLine label="− Compra de dólares" value={fxOut} currency={currency} negative />
-          )}
-          {fxIn != null && fxIn > 0 && (
-            <DesgloseLine label="+ Compra de dólares" value={fxIn} currency={currency} positive />
-          )}
-
-          {/* TC pendiente */}
-          {hasPending && (
-            <div className="flex items-center justify-between rounded-md bg-amber-500/10 border border-amber-500/20 px-2 py-1.5 mt-2">
-              <span className="flex items-center gap-1.5 text-amber-400">
-                <AlertTriangle className="h-3 w-3" />
-                TC pendiente de pago
-              </span>
-              <span className="text-amber-400 font-medium">
-                − {formatCurrency(pendingTC, currency)}
-              </span>
-            </div>
-          )}
-        </div>
+          </div>
+        )}
       </CardContent>
     </Card>
-  );
-}
-
-function DesgloseLine({
-  label, value, currency, positive, negative, neutral,
-}: {
-  label: string; value: number; currency: "ARS" | "USD";
-  positive?: boolean; negative?: boolean; neutral?: boolean;
-}) {
-  return (
-    <div className="flex items-center justify-between">
-      <span className="text-muted-foreground">{label}</span>
-      <span className={
-        positive ? "text-emerald-400 font-medium" :
-        negative ? "text-destructive font-medium" :
-        "text-foreground"
-      }>
-        {formatCurrency(value, currency)}
-      </span>
-    </div>
   );
 }
 
@@ -363,8 +326,8 @@ function FxForm({
   const [notes,        setNotes]        = useState("");
 
   // USD calculados automáticamente
-  const ars = parseFloat(arsAmount)    || 0;
-  const rate = parseFloat(exchangeRate) || 0;
+  const ars  = parseAmount(arsAmount);
+  const rate = parseAmount(exchangeRate);
   const usd  = rate > 0 ? ars / rate : 0;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -390,8 +353,8 @@ function FxForm({
       <div>
         <Label className="text-xs mb-1.5 block">Pesos a gastar (ARS)</Label>
         <Input
-          type="number" step="0.01" min="0.01"
-          placeholder="50,000"
+          type="text"
+          placeholder="50000"
           value={arsAmount}
           onChange={e => setArsAmount(e.target.value)}
           inputMode="decimal"
@@ -403,8 +366,8 @@ function FxForm({
       <div>
         <Label className="text-xs mb-1.5 block">Cotización ($ por USD)</Label>
         <Input
-          type="number" step="0.01" min="0.01"
-          placeholder="1.150"
+          type="text"
+          placeholder="1150"
           value={exchangeRate}
           onChange={e => setExchangeRate(e.target.value)}
           inputMode="decimal"

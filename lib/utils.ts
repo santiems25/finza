@@ -5,6 +5,26 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+/** Parsea un string numérico aceptando tanto punto como coma como decimal. */
+export function parseAmount(v: string): number {
+  return parseFloat(v.replace(",", ".")) || 0;
+}
+
+/**
+ * Parsea una cantidad que puede ser un número o una fracción ("2/120").
+ * Devuelve null si el valor no es válido.
+ */
+export function parseQuantity(v: string): number | null {
+  const s = v.trim().replace(",", ".");
+  if (s.includes("/")) {
+    const [a, b] = s.split("/").map(Number);
+    if (isNaN(a) || isNaN(b) || b === 0) return null;
+    return a / b;
+  }
+  const n = parseFloat(s);
+  return isNaN(n) ? null : n;
+}
+
 export function formatCurrency(amount: number, currency: "ARS" | "USD"): string {
   if (currency === "USD") {
     return new Intl.NumberFormat("en-US", {
