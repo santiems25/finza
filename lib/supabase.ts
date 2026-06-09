@@ -11,10 +11,25 @@ export const supabase = createBrowserClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
+// ─── Helper interno ───────────────────────────────────────────────────────────
+
+/** Devuelve el UID del usuario autenticado o lanza error si no hay sesión. */
+async function uid(): Promise<string> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("No autenticado");
+  return user.id;
+}
+
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 
 export async function signIn(email: string, password: string) {
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) throw error;
+  return data;
+}
+
+export async function signUp(email: string, password: string) {
+  const { data, error } = await supabase.auth.signUp({ email, password });
   if (error) throw error;
   return data;
 }
@@ -41,9 +56,10 @@ export async function getCreditCards(): Promise<CreditCard[]> {
 }
 
 export async function upsertCreditCard(card: Partial<CreditCard> & { id?: string }) {
+  const user_id = await uid();
   const { data, error } = await supabase
     .from("credit_cards")
-    .upsert(card)
+    .upsert({ ...card, user_id })
     .select()
     .single();
   if (error) throw error;
@@ -65,9 +81,10 @@ export async function getMonthlyConfigs(): Promise<CreditCardMonthlyConfig[]> {
 export async function upsertMonthlyConfig(
   config: Omit<CreditCardMonthlyConfig, "id" | "created_at">
 ): Promise<CreditCardMonthlyConfig> {
+  const user_id = await uid();
   const { data, error } = await supabase
     .from("credit_card_monthly_config")
-    .upsert(config, { onConflict: "credit_card_id,month,year" })
+    .upsert({ ...config, user_id }, { onConflict: "credit_card_id,month,year" })
     .select()
     .single();
   if (error) throw error;
@@ -98,13 +115,15 @@ export async function getExpenses(filters?: {
 }
 
 export async function addExpense(expense: Omit<Expense, "id" | "created_at">) {
-  const { data, error } = await supabase.from("expenses").insert(expense).select().single();
+  const user_id = await uid();
+  const { data, error } = await supabase.from("expenses").insert({ ...expense, user_id }).select().single();
   if (error) throw error;
   return data;
 }
 
 export async function addExpenses(expenses: Omit<Expense, "id" | "created_at">[]) {
-  const { data, error } = await supabase.from("expenses").insert(expenses).select();
+  const user_id = await uid();
+  const { data, error } = await supabase.from("expenses").insert(expenses.map(e => ({ ...e, user_id }))).select();
   if (error) throw error;
   return data;
 }
@@ -125,8 +144,9 @@ export async function getBillingPayments(): Promise<BillingPayment[]> {
 export async function markBillingAsPaid(
   creditCardId: string, billingMonth: number, billingYear: number
 ): Promise<void> {
+  const user_id = await uid();
   const { error } = await supabase.from("billing_payments").upsert({
-    credit_card_id: creditCardId, billing_month: billingMonth, billing_year: billingYear,
+    credit_card_id: creditCardId, billing_month: billingMonth, billing_year: billingYear, user_id,
   });
   if (error) throw error;
 }
@@ -155,7 +175,8 @@ export async function getIncomes(): Promise<Income[]> {
 }
 
 export async function addIncome(income: Omit<Income, "id" | "created_at">) {
-  const { data, error } = await supabase.from("incomes").insert(income).select().single();
+  const user_id = await uid();
+  const { data, error } = await supabase.from("incomes").insert({ ...income, user_id }).select().single();
   if (error) throw error;
   return data;
 }
@@ -201,7 +222,8 @@ export async function getFxTransactions(): Promise<FxTransaction[]> {
 export async function addFxTransaction(
   tx: Omit<FxTransaction, "id" | "created_at">
 ): Promise<void> {
-  const { error } = await supabase.from("fx_transactions").insert(tx);
+  const user_id = await uid();
+  const { error } = await supabase.from("fx_transactions").insert({ ...tx, user_id });
   if (error) throw error;
 }
 
@@ -222,9 +244,10 @@ export async function getDividends(): Promise<Dividend[]> {
 }
 
 export async function addDividend(dividend: Omit<Dividend, "id" | "created_at">) {
+  const user_id = await uid();
   const { data, error } = await supabase
     .from("dividends")
-    .insert(dividend)
+    .insert({ ...dividend, user_id })
     .select()
     .single();
   if (error) throw error;
@@ -248,9 +271,10 @@ export async function getInvestments(): Promise<Investment[]> {
 }
 
 export async function addInvestment(investment: Omit<Investment, "id" | "created_at">) {
+  const user_id = await uid();
   const { data, error } = await supabase
     .from("investments")
-    .insert(investment)
+    .insert({ ...investment, user_id })
     .select()
     .single();
   if (error) throw error;
