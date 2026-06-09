@@ -45,7 +45,7 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center px-4 bg-background">
       {/* Fondo con gradiente sutil */}
-      <div className="absolute inset-0 bg-gradient-to-br from-blue-950/30 via-background to-violet-950/20 pointer-events-none" />
+      <div className="absolute inset-0 bg-gradient-to-br from-[#2d5016]/15 via-background to-[#4a7c3f]/10 pointer-events-none" />
 
       <div className="w-full max-w-sm relative">
         {/* Logo */}
@@ -56,7 +56,7 @@ export default function LoginPage() {
         <Card className="border-border/50 shadow-2xl">
           <CardHeader className="pb-2 text-center">
             <p className="text-muted-foreground text-sm">
-              Ingresá para acceder a tus finanzas
+              Tus finanzas en un solo lugar
             </p>
           </CardHeader>
 
@@ -111,7 +111,7 @@ export default function LoginPage() {
               {/* Botón */}
               <Button
                 type="submit"
-                className="w-full h-11 gap-2 bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-500 hover:to-violet-500 border-0 text-base font-medium"
+                className="w-full h-11 gap-2 bg-[#2d5016] hover:bg-[#3a6b1d] border-0 text-base font-medium"
                 disabled={loading}
               >
                 {loading ? (

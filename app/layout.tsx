@@ -7,16 +7,17 @@ import { Toaster } from "@/components/ui/toaster";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Finza",
-  description: "Tu app de finanzas personales",
+  title: "finems",
+  description: "Tus finanzas en un solo lugar",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
-    title: "Finza",
-    statusBarStyle: "black-translucent",
+    title: "finems",
+    statusBarStyle: "default",
   },
   icons: {
     apple: "/apple-touch-icon.png",
+    icon:  "/favicon.svg",
   },
 };
 
@@ -24,12 +25,12 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
-  themeColor: "#0f172a",
+  themeColor: "#e8e0d0",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="es" className="dark">
+    <html lang="es">
       <body className={inter.className}>
         <div className="flex flex-col min-h-screen max-w-md mx-auto relative">
           <main className="flex-1 overflow-y-auto pb-20">

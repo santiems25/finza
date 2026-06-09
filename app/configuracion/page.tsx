@@ -98,12 +98,12 @@ export default function ConfiguracionPage() {
       </div>
 
       {/* Branding */}
-      <Card className="mb-5 border-0 bg-gradient-to-br from-blue-950/60 to-violet-950/60">
+      <Card className="mb-5 border-0 bg-gradient-to-br from-[#2d5016]/15 to-[#4a7c3f]/10">
         <CardContent className="p-4 flex items-center gap-4">
           <FinzaLogo size="lg" />
           <div>
             <p className="text-xs text-muted-foreground">Versión 1.0</p>
-            <p className="text-xs text-muted-foreground">Finanzas personales</p>
+            <p className="text-xs text-muted-foreground">Tus finanzas en un solo lugar</p>
           </div>
         </CardContent>
       </Card>
@@ -161,7 +161,7 @@ function CardSection({
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="text-base flex items-center gap-2.5">
-          <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center shrink-0">
+          <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-[#2d5016] to-[#4a7c3f] flex items-center justify-center shrink-0">
             <CreditCard className="h-3.5 w-3.5 text-white" />
           </div>
           {card.name}

@@ -229,7 +229,7 @@ function BillingGroupCard({
             <div className="flex-1 min-w-0">
               {/* Tarjeta + período */}
               <div className="flex items-center gap-2 flex-wrap mb-2">
-                <div className="h-5 w-5 rounded bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center shrink-0">
+                <div className="h-5 w-5 rounded bg-gradient-to-br from-[#2d5016] to-[#4a7c3f] flex items-center justify-center shrink-0">
                   <CreditCard className="h-3 w-3 text-white" />
                 </div>
                 <span className="text-sm font-semibold">{group.card.name}</span>
@@ -279,7 +279,7 @@ function BillingGroupCard({
               variant={group.isPaid ? "outline" : "default"}
               className={`shrink-0 h-8 text-xs ${
                 !group.isPaid
-                  ? "bg-gradient-to-r from-blue-600 to-violet-600 border-0"
+                  ? "bg-[#2d5016] hover:bg-[#3a6b1d] border-0"
                   : ""
               }`}
               onClick={() => onToggle(group)}

@@ -110,7 +110,7 @@ export function SavingsOverview({
 
       {/* ── Compra de dólares ── */}
       <Button
-        className="w-full gap-2 bg-gradient-to-r from-blue-600 to-violet-600 border-0"
+        className="w-full gap-2 bg-[#2d5016] hover:bg-[#3a6b1d] border-0"
         onClick={() => setFxOpen(true)}
       >
         <ArrowRightLeft className="h-4 w-4" />

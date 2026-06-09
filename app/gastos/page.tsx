@@ -101,7 +101,7 @@ export default function GastosPage() {
           <DialogTrigger asChild>
             <Button
               size="sm"
-              className="gap-1.5 bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-500 hover:to-violet-500 border-0"
+              className="gap-1.5 bg-[#2d5016] hover:bg-[#3a6b1d] border-0"
             >
               <Plus className="h-4 w-4" /> Nuevo
             </Button>

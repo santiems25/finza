@@ -1,11 +1,11 @@
 {
-  "name": "Finza",
-  "short_name": "Finza",
-  "description": "Tu app de finanzas personales",
+  "name": "finems",
+  "short_name": "finems",
+  "description": "Tus finanzas en un solo lugar",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0f172a",
-  "theme_color": "#0f172a",
+  "background_color": "#ede8dc",
+  "theme_color": "#e8e0d0",
   "orientation": "portrait",
   "icons": [
     {

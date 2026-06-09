@@ -175,7 +175,7 @@ export default function InversionesPage() {
           </Button>
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-              <Button size="sm" className="gap-1.5 bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-500 hover:to-violet-500 border-0">
+              <Button size="sm" className="gap-1.5 bg-[#2d5016] hover:bg-[#3a6b1d] border-0">
                 <Plus className="h-4 w-4" /> Compra
               </Button>
             </DialogTrigger>
@@ -634,14 +634,14 @@ function FilterChip({ label, active, onClick }: { label: string; active: boolean
 function EmptyState({ onAdd }: { onAdd: () => void }) {
   return (
     <div className="text-center py-16 space-y-4">
-      <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-blue-500/20 to-violet-500/20 flex items-center justify-center mx-auto">
+      <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-[#2d5016]/15 to-[#4a7c3f]/10 flex items-center justify-center mx-auto">
         <DollarSign className="h-8 w-8 text-blue-400" />
       </div>
       <div>
         <p className="text-sm font-medium">No hay posiciones registradas</p>
         <p className="text-xs text-muted-foreground mt-1">Registrá tu primera compra para empezar a trackear tu portafolio</p>
       </div>
-      <Button onClick={onAdd} className="bg-gradient-to-r from-blue-600 to-violet-600 border-0">
+      <Button onClick={onAdd} className="bg-[#2d5016] hover:bg-[#3a6b1d] border-0">
         <Plus className="h-4 w-4 mr-2" /> Registrar primera compra
       </Button>
     </div>

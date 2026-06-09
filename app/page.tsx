@@ -7,7 +7,7 @@ export default function DashboardPage() {
   return (
     <div className="px-4 pt-6 pb-2">
       <div className="mb-6">
-        <FinzaLogo size="md" />
+        <FinzaLogo size="md" withSlogan />
       </div>
       <Suspense fallback={<DashboardSkeleton />}>
         <DashboardContent />
