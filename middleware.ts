@@ -27,15 +27,17 @@ export async function middleware(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser();
 
-  const isLoginPage = request.nextUrl.pathname.startsWith("/login");
+  const pathname = request.nextUrl.pathname;
+  const isPublicPage = pathname.startsWith("/login") || pathname.startsWith("/register");
 
-  if (!user && !isLoginPage) {
+  if (!user && !isPublicPage) {
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/login";
     return NextResponse.redirect(loginUrl);
   }
 
-  if (user && isLoginPage) {
+  // Si ya está logueado no tiene sentido que vaya a login ni a register
+  if (user && isPublicPage) {
     const homeUrl = request.nextUrl.clone();
     homeUrl.pathname = "/";
     return NextResponse.redirect(homeUrl);
