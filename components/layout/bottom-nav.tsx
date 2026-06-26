@@ -10,7 +10,7 @@ const navItems = [
   { href: "/gastos",        icon: ListMinus,       label: "Gastos"    },
   { href: "/ahorro",        icon: Landmark,        label: "Ahorro"    },
   { href: "/inversiones",   icon: TrendingUp,      label: "Portafolio" },
-  { href: "/configuracion", icon: Settings,        label: "Config"    },
+  { href: "/configuracion", icon: Settings,        label: "Tarjetas"  },
 ];
 
 export function BottomNav() {

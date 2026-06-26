@@ -2,13 +2,17 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { CreditCard, Pencil, Check, X, Trash2, LogOut } from "lucide-react";
+import { CreditCard, Pencil, Check, X, Trash2, LogOut, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import {
   getCreditCards, upsertCreditCard,
   getMonthlyConfigs, upsertMonthlyConfig, deleteMonthlyConfig,
@@ -36,6 +40,7 @@ export default function ConfiguracionPage() {
   const [monthlyConfigs, setMonthlyConfigs] = useState<CreditCardMonthlyConfig[]>([]);
   const [loading, setLoading]               = useState(true);
   const [loggingOut, setLoggingOut]         = useState(false);
+  const [newCardOpen, setNewCardOpen]        = useState(false);
   const { toast } = useToast();
 
   const handleLogout = async () => {
@@ -69,6 +74,19 @@ export default function ConfiguracionPage() {
     }
   };
 
+  const handleCreateCard = async (data: {
+    name: string; card_type: "visa" | "master"; closing_day: number; due_day: number;
+  }) => {
+    try {
+      await upsertCreditCard(data);
+      toast({ title: `✅ Tarjeta "${data.name}" creada` });
+      setNewCardOpen(false);
+      load();
+    } catch {
+      toast({ title: "Error al crear tarjeta", variant: "destructive" });
+    }
+  };
+
   const handleSaveMonthly = async (
     cfg: Omit<CreditCardMonthlyConfig, "id" | "created_at">
   ) => {
@@ -93,8 +111,8 @@ export default function ConfiguracionPage() {
   return (
     <div className="px-4 pt-6 pb-8">
       <div className="mb-6">
-        <h1 className="text-xl font-bold tracking-tight">Configuración</h1>
-        <p className="text-muted-foreground text-xs">Tarjetas de crédito</p>
+        <h1 className="text-xl font-bold tracking-tight">Tarjetas</h1>
+        <p className="text-muted-foreground text-xs">Tus tarjetas de crédito</p>
       </div>
 
       {/* Branding */}
@@ -119,6 +137,15 @@ export default function ConfiguracionPage() {
         {loggingOut ? "Cerrando sesión..." : "Cerrar sesión"}
       </Button>
 
+      {/* Botón nueva tarjeta */}
+      <Button
+        className="w-full gap-2 bg-[#2d5016] hover:bg-[#3a6b1d] border-0 mb-5"
+        onClick={() => setNewCardOpen(true)}
+      >
+        <Plus className="h-4 w-4" />
+        Nueva tarjeta
+      </Button>
+
       {loading ? (
         <div className="space-y-4">
           {[0, 1].map(i => (
@@ -139,6 +166,16 @@ export default function ConfiguracionPage() {
           ))}
         </div>
       )}
+
+      {/* Dialog nueva tarjeta */}
+      <Dialog open={newCardOpen} onOpenChange={setNewCardOpen}>
+        <DialogContent className="max-w-sm mx-auto">
+          <DialogHeader>
+            <DialogTitle>Nueva tarjeta</DialogTitle>
+          </DialogHeader>
+          <NewCardForm onSave={handleCreateCard} onCancel={() => setNewCardOpen(false)} />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -382,3 +419,86 @@ function DayInput({ label, value, onChange }: { label: string; value: string; on
 }
 
 function validDay(d: number) { return !isNaN(d) && d >= 1 && d <= 31; }
+
+// ─── NewCardForm ───────────────────────────────────────────────────────────────
+
+function NewCardForm({
+  onSave, onCancel,
+}: {
+  onSave: (data: { name: string; card_type: "visa" | "master"; closing_day: number; due_day: number }) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [name,       setName]       = useState("");
+  const [cardType,   setCardType]   = useState<"visa" | "master">("visa");
+  const [closingDay, setClosingDay] = useState("25");
+  const [dueDay,     setDueDay]     = useState("12");
+  const [saving,     setSaving]     = useState(false);
+  const [error,      setError]      = useState<string | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    const cd = parseInt(closingDay), dd = parseInt(dueDay);
+    if (!name.trim()) { setError("Ingresá un nombre"); return; }
+    if (!validDay(cd)) { setError("Día de cierre inválido (1-31)"); return; }
+    if (!validDay(dd)) { setError("Día de vencimiento inválido (1-31)"); return; }
+    setSaving(true);
+    try {
+      await onSave({ name: name.trim(), card_type: cardType, closing_day: cd, due_day: dd });
+    } catch {
+      setError("Error al guardar");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      {/* Nombre */}
+      <div>
+        <Label className="text-xs mb-1.5 block">Nombre de la tarjeta</Label>
+        <Input
+          placeholder="Ej: Visa Galicia, Master BBVA..."
+          value={name}
+          onChange={e => setName(e.target.value)}
+          autoFocus
+          required
+        />
+      </div>
+
+      {/* Tipo */}
+      <div>
+        <Label className="text-xs mb-1.5 block">Tipo</Label>
+        <Select value={cardType} onValueChange={v => setCardType(v as "visa" | "master")}>
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="visa">Visa</SelectItem>
+            <SelectItem value="master">Mastercard</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Días */}
+      <div className="grid grid-cols-2 gap-2">
+        <DayInput label="Día de cierre" value={closingDay} onChange={setClosingDay} />
+        <DayInput label="Día de vencimiento" value={dueDay} onChange={setDueDay} />
+      </div>
+
+      {error && (
+        <p className="text-xs text-destructive">{error}</p>
+      )}
+
+      <div className="flex gap-2">
+        <Button type="submit" className="flex-1 gap-1.5" disabled={saving}>
+          <Plus className="h-4 w-4" />
+          {saving ? "Guardando..." : "Crear tarjeta"}
+        </Button>
+        <Button type="button" variant="outline" onClick={onCancel} disabled={saving}>
+          Cancelar
+        </Button>
+      </div>
+    </form>
+  );
+}

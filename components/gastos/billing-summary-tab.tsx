@@ -101,8 +101,8 @@ function buildBillingGroups(
   // Ordenar: primero pendientes del mes actual/futuro, luego histórico desc
   return Array.from(map.values()).sort((a, b) => {
     if (a.isPaid !== b.isPaid) return a.isPaid ? 1 : -1;
-    if (a.billingYear !== b.billingYear) return b.billingYear - a.billingYear;
-    if (a.billingMonth !== b.billingMonth) return b.billingMonth - a.billingMonth;
+    if (a.billingYear !== b.billingYear) return a.billingYear - b.billingYear;
+    if (a.billingMonth !== b.billingMonth) return a.billingMonth - b.billingMonth;
     return a.card.name.localeCompare(b.card.name);
   });
 }

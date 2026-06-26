@@ -229,11 +229,12 @@ export function ExpenseForm({ cards, monthlyConfigs, onSaved }: Props) {
                 {cards.map(card => {
                   const cd = resolveClosingDay(card, form.date, monthlyConfigs);
                   const isOverride = cd !== card.closing_day;
-                  // Mes real del cierre: si cd < 15 → mes siguiente, si >= 15 → mismo mes
+                  // Mes real del próximo cierre: si el día del gasto ya pasó el cierre → mes siguiente
                   const expenseDate = new Date(form.date + "T00:00:00");
-                  const closingMonth = cd < 15
-                    ? new Date(expenseDate.getFullYear(), expenseDate.getMonth() + 1, 1).getMonth()
-                    : expenseDate.getMonth();
+                  const expenseDay  = expenseDate.getDate();
+                  const closingMonth = expenseDay < cd
+                    ? expenseDate.getMonth()
+                    : (expenseDate.getMonth() + 1) % 12;
                   return (
                     <SelectItem key={card.id} value={card.id}>
                       {card.name} · Cierra el {cd} de {getMonthName(closingMonth)}{isOverride ? " *" : ""}
