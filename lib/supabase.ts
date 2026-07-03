@@ -83,7 +83,7 @@ export async function getCustomCategories(): Promise<ExpenseCustomCategory[]> {
   return data ?? [];
 }
 
-export async function upsertCustomCategory(cat: Partial<ExpenseCustomCategory> & { name: string }): Promise<ExpenseCustomCategory> {
+export async function upsertCustomCategory(cat: Partial<ExpenseCustomCategory>): Promise<ExpenseCustomCategory> {
   const user_id = await uid();
   const { data, error } = await supabase
     .from("expense_categories")

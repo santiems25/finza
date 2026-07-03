@@ -44,7 +44,7 @@ export function DashboardContent() {
   const now = new Date();
   const [viewMonth, setViewMonth] = useState(now.getMonth());
   const [viewYear,  setViewYear]  = useState(now.getFullYear());
-  const [selectedCategory, setSelectedCategory] = useState<ExpenseCategory | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [incomeOpen, setIncomeOpen] = useState(false);
 
   const [expenses,        setExpenses]        = useState<Expense[]>([]);
@@ -268,7 +268,7 @@ export function DashboardContent() {
             <div className="flex items-center justify-between">
               <CardTitle className="text-sm font-semibold">
                 {selectedCategory
-                  ? `${CATEGORY_ICONS[selectedCategory]} ${CATEGORY_LABELS[selectedCategory]}`
+                  ? `${CATEGORY_ICONS[selectedCategory as ExpenseCategory] ?? "📦"} ${CATEGORY_LABELS[selectedCategory as ExpenseCategory] ?? selectedCategory}`
                   : "Últimos gastos"}
               </CardTitle>
               {selectedCategory && (
@@ -284,17 +284,21 @@ export function DashboardContent() {
           </CardHeader>
           <CardContent className="p-0">
             {filtered.slice(0, 8).map((expense, i) => {
-              const card   = cards.find(c => c.id === expense.credit_card_id);
-              const colors = CATEGORY_COLORS[expense.category];
+              const card     = cards.find(c => c.id === expense.credit_card_id);
+              const colors   = CATEGORY_COLORS[expense.category as ExpenseCategory];
+              const catIcon  = CATEGORY_ICONS[expense.category as ExpenseCategory] ?? "📦";
+              const catLabel = CATEGORY_LABELS[expense.category as ExpenseCategory] ?? expense.category;
+              const catBg    = colors?.bg   ?? "bg-slate-500/15";
+              const catText  = colors?.text ?? "text-slate-400";
               return (
                 <div key={expense.id}>
                   <div className="flex items-center gap-3 px-5 py-3">
-                    <span className="text-lg leading-none shrink-0">{CATEGORY_ICONS[expense.category]}</span>
+                    <span className="text-lg leading-none shrink-0">{catIcon}</span>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">{expense.description}</p>
                       <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${colors.bg} ${colors.text}`}>
-                          {CATEGORY_LABELS[expense.category]}
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${catBg} ${catText}`}>
+                          {catLabel}
                         </span>
                         {expense.total_installments > 1 && (
                           <span className="text-[10px] text-muted-foreground">
@@ -430,10 +434,10 @@ function CategoryBreakdown({
   title, totals, currency, selectedCategory, onSelect,
 }: {
   title: string;
-  totals: { category: ExpenseCategory; total: number; percent: number }[];
+  totals: { category: string; total: number; percent: number }[];
   currency: "ARS" | "USD";
-  selectedCategory: ExpenseCategory | null;
-  onSelect: (cat: ExpenseCategory | null) => void;
+  selectedCategory: string | null;
+  onSelect: (cat: string | null) => void;
 }) {
   return (
     <Card>
@@ -442,7 +446,7 @@ function CategoryBreakdown({
       </CardHeader>
       <CardContent className="p-4 pt-0 space-y-2.5">
         {totals.map(({ category, total, percent }) => {
-          const colors = CATEGORY_COLORS[category];
+          const colors = CATEGORY_COLORS[category as ExpenseCategory];
           const active = selectedCategory === category;
           return (
             <button
@@ -454,8 +458,8 @@ function CategoryBreakdown({
             >
               <div className="flex items-center justify-between mb-1">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-sm">{CATEGORY_ICONS[category]}</span>
-                  <span className="text-xs font-medium">{CATEGORY_LABELS[category]}</span>
+                  <span className="text-sm">{CATEGORY_ICONS[category as ExpenseCategory] ?? "📦"}</span>
+                  <span className="text-xs font-medium">{CATEGORY_LABELS[category as ExpenseCategory] ?? category}</span>
                   {active && <Badge variant="outline" className="text-[10px] h-4 px-1">filtro</Badge>}
                 </div>
                 <div className="flex items-center gap-2">
@@ -466,7 +470,7 @@ function CategoryBreakdown({
                 </div>
               </div>
               <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
-                <div className={`h-full rounded-full ${colors.bar}`} style={{ width: `${percent}%` }} />
+                <div className={`h-full rounded-full ${colors?.bar ?? "bg-slate-500"}`} style={{ width: `${percent}%` }} />
               </div>
             </button>
           );
@@ -528,7 +532,7 @@ function BillingCard({
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function getCategoryTotals(expenses: Expense[]) {
-  const map   = new Map<ExpenseCategory, number>();
+  const map   = new Map<string, number>();
   const total = expenses.reduce((s, e) => s + e.amount, 0);
   for (const e of expenses) map.set(e.category, (map.get(e.category) ?? 0) + e.amount);
   return Array.from(map.entries())

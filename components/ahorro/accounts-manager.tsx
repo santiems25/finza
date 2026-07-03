@@ -224,7 +224,7 @@ function AccountForm({
 
       <div>
         <Label className="text-xs mb-1.5 block">Tipo</Label>
-        <Select value={accountType} onValueChange={setAccountType}>
+        <Select value={accountType} onValueChange={v => setAccountType(v as "bank" | "wallet" | "cash")}>
           <SelectTrigger><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="bank">🏦 Banco</SelectItem>

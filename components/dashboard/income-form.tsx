@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { addIncome } from "@/lib/supabase";
-import type { Currency, IncomeSource } from "@/types";
+import { addIncome, getAccounts } from "@/lib/supabase";
+import type { Currency, IncomeSource, Account } from "@/types";
 import { INCOME_SOURCE_LABELS, INCOME_SOURCE_ICONS } from "@/types";
 
 interface Props {
@@ -16,13 +16,19 @@ interface Props {
 
 export function IncomeForm({ defaultDate, onSaved }: Props) {
   const [saving, setSaving] = useState(false);
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [form, setForm] = useState({
     amount:      "",
     currency:    "ARS" as Currency,
     description: "Sueldo",
     source:      "sueldo" as IncomeSource,
     date:        defaultDate,
+    account_id:  "",
   });
+
+  useEffect(() => {
+    getAccounts().then(setAccounts).catch(() => {});
+  }, []);
 
   const set = (field: string, value: string) =>
     setForm(prev => ({ ...prev, [field]: value }));
@@ -38,6 +44,7 @@ export function IncomeForm({ defaultDate, onSaved }: Props) {
         description: form.description,
         source:      form.source,
         date:        form.date,
+        account_id:  form.account_id || null,
       });
       onSaved();
     } finally {
@@ -98,6 +105,22 @@ export function IncomeForm({ defaultDate, onSaved }: Props) {
           required
         />
       </div>
+
+      {/* Cuenta */}
+      {accounts.length > 0 && (
+        <div>
+          <Label className="text-xs mb-1.5 block">Cuenta <span className="text-muted-foreground">(opcional)</span></Label>
+          <Select value={form.account_id || "none"} onValueChange={v => set("account_id", v === "none" ? "" : v)}>
+            <SelectTrigger><SelectValue placeholder="Sin especificar" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">Sin especificar</SelectItem>
+              {accounts.map(a => (
+                <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
 
       {/* Fecha */}
       <div>
