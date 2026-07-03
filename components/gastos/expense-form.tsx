@@ -8,7 +8,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from "@/components/ui/select";
 import { addExpenses } from "@/lib/supabase";
-import { getBillingPeriod, getMonthName, parseAmount } from "@/lib/utils";
+import { getBillingPeriodForCard, getMonthName, parseAmount } from "@/lib/utils";
 import type {
   CreditCard, CreditCardMonthlyConfig, Currency, ExpenseCategory, PaymentMethod, Account,
   ExpenseCustomCategory,
@@ -32,21 +32,6 @@ function addMonths(dateStr: string, months: number): string {
   return d.toISOString().split("T")[0];
 }
 
-/** Devuelve el closing_day correcto para una tarjeta en una fecha dada,
- *  buscando primero en los overrides mensuales y cayendo al default del card. */
-function resolveClosingDay(
-  card: CreditCard,
-  dateStr: string,
-  monthlyConfigs: CreditCardMonthlyConfig[]
-): number {
-  const d     = new Date(dateStr + "T00:00:00");
-  const month = d.getMonth();   // 0-indexed
-  const year  = d.getFullYear();
-  const override = monthlyConfigs.find(
-    mc => mc.credit_card_id === card.id && mc.month === month && mc.year === year
-  );
-  return override?.closing_day ?? card.closing_day;
-}
 
 export function ExpenseForm({ cards, monthlyConfigs, accounts, customCategories, onSaved }: Props) {
   const [saving, setSaving] = useState(false);
@@ -73,14 +58,9 @@ export function ExpenseForm({ cards, monthlyConfigs, accounts, customCategories,
   const totalAmount  = parseAmount(form.amount);
   const perCuota     = numCuotas > 1 ? totalAmount / numCuotas : totalAmount;
 
-  // Closing day efectivo para la fecha del formulario (usa override mensual si existe)
-  const effectiveClosingDay = selectedCard
-    ? resolveClosingDay(selectedCard, form.date, monthlyConfigs)
-    : null;
-
-  // Preview del primer período
-  const firstPeriod = isCredit && selectedCard && effectiveClosingDay != null
-    ? getBillingPeriod(form.date, effectiveClosingDay)
+  // Preview del primer período (usa fechas exactas de cierre si están configuradas)
+  const firstPeriod = isCredit && selectedCard
+    ? getBillingPeriodForCard(form.date, selectedCard, monthlyConfigs)
     : null;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -104,11 +84,10 @@ export function ExpenseForm({ cards, monthlyConfigs, accounts, customCategories,
         let billing_year:   number | null = null;
 
         if (isCredit && selectedCard) {
-          const cd = resolveClosingDay(selectedCard, expenseDate, monthlyConfigs);
-          const bp = getBillingPeriod(expenseDate, cd);
+          const bp = getBillingPeriodForCard(expenseDate, selectedCard, monthlyConfigs);
           billing_period = bp.periodLabel;
-          billing_month  = bp.dueMonth;
-          billing_year   = bp.dueYear;
+          billing_month  = bp.billingMonth;
+          billing_year   = bp.billingYear;
         }
 
         // Para crédito: si la tarjeta tiene cuenta vinculada, usar esa
@@ -268,18 +247,10 @@ export function ExpenseForm({ cards, monthlyConfigs, accounts, customCategories,
               </SelectTrigger>
               <SelectContent>
                 {cards.map(card => {
-                  const cd = resolveClosingDay(card, form.date, monthlyConfigs);
-                  const isOverride = cd !== card.closing_day;
-                  // Mes real del próximo cierre: si el día del gasto ya pasó el cierre → mes siguiente
-                  const expenseDate = new Date(form.date + "T00:00:00");
-                  const expenseDay  = expenseDate.getDate();
-                  // Cierre inclusivo: si el gasto cae en o antes del cierre, cierra este mes
-                  const closingMonth = expenseDay <= cd
-                    ? expenseDate.getMonth()
-                    : (expenseDate.getMonth() + 1) % 12;
+                  const bp = getBillingPeriodForCard(form.date, card, monthlyConfigs);
                   return (
                     <SelectItem key={card.id} value={card.id}>
-                      {card.name} · Cierra el {cd} de {getMonthName(closingMonth)}{isOverride ? " *" : ""}
+                      {card.name} · Cierra el {bp.closingDate.getDate()} de {getMonthName(bp.closingDate.getMonth())}
                     </SelectItem>
                   );
                 })}
@@ -302,13 +273,11 @@ export function ExpenseForm({ cards, monthlyConfigs, accounts, customCategories,
           </div>
 
           {/* Preview */}
-          {firstPeriod && selectedCard && effectiveClosingDay != null && (
+          {firstPeriod && selectedCard && (
             <div className="rounded-lg bg-primary/5 border border-primary/20 px-3 py-2.5 space-y-1">
-              {effectiveClosingDay !== selectedCard.closing_day && (
-                <p className="text-[10px] text-amber-400 mb-1">
-                  ⚠ Usando día de cierre configurado para este mes ({effectiveClosingDay}), no el default ({selectedCard.closing_day})
-                </p>
-              )}
+              <p className="text-[10px] text-muted-foreground mb-1">
+                Cierra el {firstPeriod.closingDate.getDate()} de {getMonthName(firstPeriod.closingDate.getMonth())}
+              </p>
               {!form.amount ? null : numCuotas === 1 ? (
                 <p className="text-xs">
                   → Resumen <strong className="text-primary">{firstPeriod.periodLabel}</strong>

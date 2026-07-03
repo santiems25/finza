@@ -8,7 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { formatCurrency, formatDate, getMonthName, getDueMonthYear } from "@/lib/utils";
+import { formatCurrency, formatDate, getMonthName, getDueDate } from "@/lib/utils";
 import { markBillingAsPaid, unmarkBillingAsPaid } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import type {
@@ -24,7 +24,7 @@ interface BillingGroup {
   billingMonth: number;
   billingYear: number;
   periodLabel: string;
-  dueDay: number;
+  dueDate: Date;
   expenses: Expense[];
   totalARS: number;
   totalUSD: number;
@@ -70,21 +70,15 @@ function buildBillingGroups(
           p.billing_month  === e.billing_month &&
           p.billing_year   === e.billing_year
       );
-      // Buscar override mensual para el due_day de este período
-      const override = monthlyConfigs.find(
-        mc =>
-          mc.credit_card_id === e.credit_card_id &&
-          mc.month === e.billing_month &&
-          mc.year  === e.billing_year
-      );
-      const dueDay = override?.due_day ?? card.due_day;
+      // Fecha exacta de vencimiento (usa override mensual o heurística)
+      const dueDate = getDueDate(e.billing_month, e.billing_year, card, monthlyConfigs);
 
       map.set(key, {
         card,
         billingMonth: e.billing_month,
         billingYear:  e.billing_year,
         periodLabel:  e.billing_period,
-        dueDay,
+        dueDate,
         expenses:     [],
         totalARS:     0,
         totalUSD:     0,
@@ -108,11 +102,9 @@ function buildBillingGroups(
 }
 
 /** Días hasta el vencimiento (negativo = ya venció). */
-function daysUntilDue(billingMonth: number, billingYear: number, dueDay: number): number {
-  const { dueMonth, dueYear } = getDueMonthYear(billingMonth, billingYear, dueDay);
+function daysUntilDue(dueDate: Date): number {
   const now = new Date();
-  const due = new Date(dueYear, dueMonth, dueDay);
-  return Math.round((due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  return Math.round((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 }
 
 // ─── Componente principal ─────────────────────────────────────────────────────
@@ -207,7 +199,7 @@ function BillingGroupCard({
   const key = `${group.card.id}-${group.billingYear}-${group.billingMonth}`;
   const isLoading = loading === key;
 
-  const days   = daysUntilDue(group.billingMonth, group.billingYear, group.dueDay);
+  const days   = daysUntilDue(group.dueDate);
   const isOverdue = !group.isPaid && days < 0;
   const isDueSoon = !group.isPaid && days >= 0 && days <= 5;
 
@@ -250,7 +242,7 @@ function BillingGroupCard({
                 ) : (
                   <Badge variant="outline" className="text-[10px] h-4 px-1.5 gap-1 text-muted-foreground">
                     <Calendar className="h-2.5 w-2.5" />
-                    Vence el {group.dueDay} de {getMonthName(getDueMonthYear(group.billingMonth, group.billingYear, group.dueDay).dueMonth)}
+                    Vence el {group.dueDate.getDate()} de {getMonthName(group.dueDate.getMonth())}
                   </Badge>
                 )}
               </div>

@@ -166,10 +166,12 @@ export const ASSET_TYPE_COLORS: Record<AssetType, string> = {
 export interface CreditCardMonthlyConfig {
   id: string;
   credit_card_id: string;
-  month: number;       // 0-indexed (0=Enero)
+  month: number;       // 0-indexed (0=Enero) — mes del RESUMEN
   year: number;
   closing_day: number;
   due_day: number;
+  closing_date: string | null; // YYYY-MM-DD exacta (prioridad sobre closing_day)
+  due_date: string | null;     // YYYY-MM-DD exacta (prioridad sobre due_day)
   created_at: string;
 }
 

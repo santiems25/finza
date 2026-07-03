@@ -1,5 +1,6 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
+import type { CreditCard, CreditCardMonthlyConfig } from "@/types";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -124,6 +125,101 @@ export function getDueMonthYear(
     return { dueMonth, dueYear };
   }
   return { dueMonth: billingMonth, dueYear: billingYear };
+}
+
+/**
+ * Fecha de CIERRE del resumen (statementMonth, statementYear) de una tarjeta.
+ *
+ * Prioridad:
+ *   1. closing_date exacta del override mensual (si existe)
+ *   2. closing_day (override o habitual) + heurística: día < 15 → el cierre
+ *      cae en el mes siguiente al del resumen; >= 15 → mismo mes.
+ */
+export function getClosingDate(
+  statementMonth: number,
+  statementYear:  number,
+  card:           CreditCard,
+  configs:        CreditCardMonthlyConfig[]
+): Date {
+  const ov = configs.find(
+    c => c.credit_card_id === card.id && c.month === statementMonth && c.year === statementYear
+  );
+  if (ov?.closing_date) return new Date(ov.closing_date + "T00:00:00");
+
+  const day = ov?.closing_day ?? card.closing_day;
+  return day < 15
+    ? new Date(statementYear, statementMonth + 1, day)
+    : new Date(statementYear, statementMonth, day);
+}
+
+/**
+ * Fecha de VENCIMIENTO del resumen (statementMonth, statementYear).
+ * Prioridad: due_date exacta del override → due_day + heurística <15.
+ */
+export function getDueDate(
+  statementMonth: number,
+  statementYear:  number,
+  card:           CreditCard,
+  configs:        CreditCardMonthlyConfig[]
+): Date {
+  const ov = configs.find(
+    c => c.credit_card_id === card.id && c.month === statementMonth && c.year === statementYear
+  );
+  if (ov?.due_date) return new Date(ov.due_date + "T00:00:00");
+
+  const day = ov?.due_day ?? card.due_day;
+  return day < 15
+    ? new Date(statementYear, statementMonth + 1, day)
+    : new Date(statementYear, statementMonth, day);
+}
+
+/**
+ * Asigna un gasto al resumen correcto usando FECHAS reales de cierre.
+ *
+ * El resumen M abarca los gastos posteriores al cierre del resumen M-1
+ * y hasta el cierre del resumen M (inclusive).
+ *
+ * Ejemplo: resumen Junio cierra el 2-julio, resumen Mayo cerró el 2-junio.
+ *   Gasto 1-julio → después del 2-junio y <= 2-julio → resumen JUNIO ✓
+ *   Gasto 3-julio → después del 2-julio → resumen JULIO ✓
+ */
+export function getBillingPeriodForCard(
+  expenseDate: string,
+  card:        CreditCard,
+  configs:     CreditCardMonthlyConfig[]
+): { periodLabel: string; billingMonth: number; billingYear: number; closingDate: Date } {
+  const d = new Date(expenseDate + "T00:00:00");
+
+  // Buscar el resumen cuya ventana contiene la fecha del gasto
+  // (desde 2 meses antes hasta 2 después del mes del gasto).
+  for (let off = -2; off <= 2; off++) {
+    const ref   = new Date(d.getFullYear(), d.getMonth() + off, 1);
+    const month = ref.getMonth();
+    const year  = ref.getFullYear();
+
+    const close = getClosingDate(month, year, card, configs);
+
+    const prevRef  = new Date(year, month - 1, 1);
+    const prevClose = getClosingDate(prevRef.getMonth(), prevRef.getFullYear(), card, configs);
+
+    if (d > prevClose && d <= close) {
+      return {
+        periodLabel:  `${MONTH_NAMES[month]} ${year}`,
+        billingMonth: month,
+        billingYear:  year,
+        closingDate:  close,
+      };
+    }
+  }
+
+  // Fallback (no debería pasar): heurística clásica
+  const bp = getBillingPeriod(expenseDate, card.closing_day);
+  return {
+    periodLabel:  bp.periodLabel,
+    billingMonth: bp.dueMonth,
+    billingYear:  bp.dueYear,
+    closingDate:  getClosingDate(bp.dueMonth, bp.dueYear, card, configs),
+  };
 }
 
 export const MONTH_NAMES = [

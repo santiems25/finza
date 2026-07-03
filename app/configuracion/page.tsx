@@ -21,7 +21,7 @@ import {
 } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import { FinzaLogo } from "@/components/layout/finza-logo";
-import { getMonthName } from "@/lib/utils";
+import { getMonthName, getClosingDate, getDueDate } from "@/lib/utils";
 import type { CreditCard as CreditCardType, CreditCardMonthlyConfig, Account } from "@/types";
 
 /** Devuelve los próximos `n` meses (incluyendo el actual) */
@@ -43,6 +43,7 @@ export default function ConfiguracionPage() {
   const [loading, setLoading]               = useState(true);
   const [loggingOut, setLoggingOut]         = useState(false);
   const [newCardOpen, setNewCardOpen]        = useState(false);
+  const [editingCard, setEditingCard]        = useState<CreditCardType | null>(null);
   const { toast } = useToast();
 
   const handleLogout = async () => {
@@ -92,12 +93,18 @@ export default function ConfiguracionPage() {
     name: string; card_type: "visa" | "master"; closing_day: number; due_day: number; account_id?: string | null;
   }) => {
     try {
-      await upsertCreditCard(data);
-      toast({ title: `✅ Tarjeta "${data.name}" creada` });
+      if (editingCard) {
+        await upsertCreditCard({ ...editingCard, ...data });
+        toast({ title: `✅ Tarjeta "${data.name}" actualizada` });
+      } else {
+        await upsertCreditCard(data);
+        toast({ title: `✅ Tarjeta "${data.name}" creada` });
+      }
       setNewCardOpen(false);
+      setEditingCard(null);
       load();
     } catch {
-      toast({ title: "Error al crear tarjeta", variant: "destructive" });
+      toast({ title: "Error al guardar tarjeta", variant: "destructive" });
     }
   };
 
@@ -177,18 +184,25 @@ export default function ConfiguracionPage() {
               onSaveMonthly={handleSaveMonthly}
               onDeleteMonthly={handleDeleteMonthly}
               onDeleteCard={handleDeleteCard}
+              onEditCard={(c) => { setEditingCard(c); setNewCardOpen(true); }}
             />
           ))}
         </div>
       )}
 
-      {/* Dialog nueva tarjeta */}
-      <Dialog open={newCardOpen} onOpenChange={setNewCardOpen}>
+      {/* Dialog nueva/editar tarjeta */}
+      <Dialog open={newCardOpen} onOpenChange={(o) => { setNewCardOpen(o); if (!o) setEditingCard(null); }}>
         <DialogContent className="max-w-sm mx-auto">
           <DialogHeader>
-            <DialogTitle>Nueva tarjeta</DialogTitle>
+            <DialogTitle>{editingCard ? "Editar tarjeta" : "Nueva tarjeta"}</DialogTitle>
           </DialogHeader>
-          <NewCardForm accounts={accounts} onSave={handleCreateCard} onCancel={() => setNewCardOpen(false)} />
+          <NewCardForm
+            key={editingCard?.id ?? "new"}
+            initial={editingCard ?? undefined}
+            accounts={accounts}
+            onSave={handleCreateCard}
+            onCancel={() => { setNewCardOpen(false); setEditingCard(null); }}
+          />
         </DialogContent>
       </Dialog>
     </div>
@@ -198,7 +212,7 @@ export default function ConfiguracionPage() {
 // ─── CardSection ──────────────────────────────────────────────────────────────
 
 function CardSection({
-  card, monthlyConfigs, onSaveHabitual, onSaveMonthly, onDeleteMonthly, onDeleteCard,
+  card, monthlyConfigs, onSaveHabitual, onSaveMonthly, onDeleteMonthly, onDeleteCard, onEditCard,
 }: {
   card: CreditCardType;
   monthlyConfigs: CreditCardMonthlyConfig[];
@@ -206,6 +220,7 @@ function CardSection({
   onSaveMonthly: (cfg: Omit<CreditCardMonthlyConfig, "id" | "created_at">) => void;
   onDeleteMonthly: (id: string) => void;
   onDeleteCard: (c: CreditCardType) => void;
+  onEditCard: (c: CreditCardType) => void;
 }) {
   const months = getMonthRange(1, 5);
   const now    = new Date();
@@ -219,6 +234,14 @@ function CardSection({
           </div>
           {card.name}
           <Badge variant="outline" className="capitalize text-xs ml-auto">{card.card_type}</Badge>
+          <Button
+            variant="ghost" size="icon"
+            className="h-7 w-7 text-muted-foreground hover:text-foreground shrink-0"
+            onClick={() => onEditCard(card)}
+            title="Editar tarjeta"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </Button>
           <Button
             variant="ghost" size="icon"
             className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
@@ -249,6 +272,7 @@ function CardSection({
                 year={year}
                 isCurrent={isCurrent}
                 override={override}
+                allConfigs={monthlyConfigs}
                 onSave={onSaveMonthly}
                 onDelete={onDeleteMonthly}
               />
@@ -326,43 +350,66 @@ function HabitualDays({
 
 // ─── MonthRow ─────────────────────────────────────────────────────────────────
 
+/** Date → YYYY-MM-DD local */
+function toYMD(d: Date): string {
+  const m = (d.getMonth() + 1).toString().padStart(2, "0");
+  const day = d.getDate().toString().padStart(2, "0");
+  return `${d.getFullYear()}-${m}-${day}`;
+}
+
+/** Formatea YYYY-MM-DD como "2 Jul" */
+function shortDate(ymd: string): string {
+  const d = new Date(ymd + "T00:00:00");
+  return `${d.getDate()} ${getMonthName(d.getMonth()).slice(0, 3)}`;
+}
+
 function MonthRow({
-  card, month, year, isCurrent, override, onSave, onDelete,
+  card, month, year, isCurrent, override, allConfigs, onSave, onDelete,
 }: {
   card: CreditCardType;
   month: number;
   year: number;
   isCurrent: boolean;
   override?: CreditCardMonthlyConfig;
+  allConfigs: CreditCardMonthlyConfig[];
   onSave: (cfg: Omit<CreditCardMonthlyConfig, "id" | "created_at">) => void;
   onDelete: (id: string) => void;
 }) {
-  const displayClosing = override?.closing_day ?? card.closing_day;
-  const displayDue     = override?.due_day     ?? card.due_day;
+  // Fechas efectivas del resumen (override exacto o calculadas con la heurística)
+  const effClosing = toYMD(getClosingDate(month, year, card, allConfigs));
+  const effDue     = toYMD(getDueDate(month, year, card, allConfigs));
 
-  const [editing,    setEditing]    = useState(false);
-  const [saving,     setSaving]     = useState(false);
-  const [closingDay, setClosingDay] = useState(displayClosing.toString());
-  const [dueDay,     setDueDay]     = useState(displayDue.toString());
+  const [editing,     setEditing]     = useState(false);
+  const [saving,      setSaving]      = useState(false);
+  const [closingDate, setClosingDate] = useState(effClosing);
+  const [dueDate,     setDueDate]     = useState(effDue);
 
   // Sync cuando cambia override (tras reload)
   useEffect(() => {
-    setClosingDay(displayClosing.toString());
-    setDueDay(displayDue.toString());
-  }, [displayClosing, displayDue]);
+    setClosingDate(effClosing);
+    setDueDate(effDue);
+  }, [effClosing, effDue]);
 
   const handleSave = async () => {
-    const cd = parseInt(closingDay), dd = parseInt(dueDay);
-    if (!validDay(cd) || !validDay(dd)) return;
+    if (!closingDate || !dueDate) return;
     setSaving(true);
-    await onSave({ credit_card_id: card.id, month, year, closing_day: cd, due_day: dd });
+    const cd = new Date(closingDate + "T00:00:00");
+    const dd = new Date(dueDate + "T00:00:00");
+    await onSave({
+      credit_card_id: card.id,
+      month, year,
+      closing_day:  cd.getDate(),
+      due_day:      dd.getDate(),
+      closing_date: closingDate,
+      due_date:     dueDate,
+    });
     setSaving(false);
     setEditing(false);
   };
 
   const handleCancel = () => {
-    setClosingDay(displayClosing.toString());
-    setDueDay(displayDue.toString());
+    setClosingDate(effClosing);
+    setDueDate(effDue);
     setEditing(false);
   };
 
@@ -382,9 +429,9 @@ function MonthRow({
           </div>
           <div className="flex items-center gap-3 shrink-0">
             <span className="text-xs text-muted-foreground">
-              Cierre <strong className="text-foreground">{displayClosing}</strong>
+              Cierra <strong className="text-foreground">{shortDate(effClosing)}</strong>
               {" · "}
-              Vence <strong className="text-foreground">{displayDue}</strong>
+              Vence <strong className="text-foreground">{shortDate(effDue)}</strong>
             </span>
             <div className="flex gap-1">
               <Button
@@ -408,10 +455,24 @@ function MonthRow({
         </div>
       ) : (
         <div className="space-y-2.5">
-          <p className="text-xs font-medium">{getMonthName(month)} {year}</p>
+          <p className="text-xs font-medium">Resumen de {getMonthName(month)} {year}</p>
           <div className="grid grid-cols-2 gap-2">
-            <DayInput label="Cierre" value={closingDay} onChange={setClosingDay} />
-            <DayInput label="Vencimiento" value={dueDay} onChange={setDueDay} />
+            <div>
+              <Label className="text-[10px] mb-1 block text-muted-foreground">Fecha de cierre</Label>
+              <Input
+                type="date" value={closingDate}
+                onChange={e => setClosingDate(e.target.value)}
+                className="h-8 text-sm"
+              />
+            </div>
+            <div>
+              <Label className="text-[10px] mb-1 block text-muted-foreground">Fecha de vencimiento</Label>
+              <Input
+                type="date" value={dueDate}
+                onChange={e => setDueDate(e.target.value)}
+                className="h-8 text-sm"
+              />
+            </div>
           </div>
           <div className="flex gap-2">
             <Button size="sm" className="flex-1 h-7 text-xs gap-1" onClick={handleSave} disabled={saving}>
@@ -447,17 +508,18 @@ function validDay(d: number) { return !isNaN(d) && d >= 1 && d <= 31; }
 // ─── NewCardForm ───────────────────────────────────────────────────────────────
 
 function NewCardForm({
-  accounts, onSave, onCancel,
+  initial, accounts, onSave, onCancel,
 }: {
+  initial?: CreditCardType;
   accounts: Account[];
   onSave: (data: { name: string; card_type: "visa" | "master"; closing_day: number; due_day: number; account_id?: string | null }) => Promise<void>;
   onCancel: () => void;
 }) {
-  const [name,       setName]       = useState("");
-  const [cardType,   setCardType]   = useState<"visa" | "master">("visa");
-  const [closingDay, setClosingDay] = useState("25");
-  const [dueDay,     setDueDay]     = useState("12");
-  const [accountId,  setAccountId]  = useState<string>("");
+  const [name,       setName]       = useState(initial?.name ?? "");
+  const [cardType,   setCardType]   = useState<"visa" | "master">(initial?.card_type ?? "visa");
+  const [closingDay, setClosingDay] = useState(initial?.closing_day?.toString() ?? "25");
+  const [dueDay,     setDueDay]     = useState(initial?.due_day?.toString() ?? "12");
+  const [accountId,  setAccountId]  = useState<string>(initial?.account_id ?? "");
   const [saving,     setSaving]     = useState(false);
   const [error,      setError]      = useState<string | null>(null);
 
@@ -539,8 +601,8 @@ function NewCardForm({
 
       <div className="flex gap-2">
         <Button type="submit" className="flex-1 gap-1.5" disabled={saving}>
-          <Plus className="h-4 w-4" />
-          {saving ? "Guardando..." : "Crear tarjeta"}
+          {initial ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+          {saving ? "Guardando..." : (initial ? "Guardar cambios" : "Crear tarjeta")}
         </Button>
         <Button type="button" variant="outline" onClick={onCancel} disabled={saving}>
           Cancelar
