@@ -81,16 +81,16 @@ export function getBillingPeriod(
   let   year  = date.getFullYear();
 
   if (closingDay < 15) {
-    // El cierre está en el mes siguiente → si el gasto es antes del cierre
-    // pertenece al resumen del mes anterior.
-    if (day < closingDay) {
+    // El cierre está en el mes siguiente. El día de cierre es INCLUSIVO:
+    // gastos hasta el día de cierre (inclusive) van al resumen anterior.
+    if (day <= closingDay) {
       month -= 1;
       if (month < 0) { month = 11; year -= 1; }
     }
   } else {
-    // El cierre está en el mismo mes → si el gasto es en/después del cierre
-    // pertenece al resumen del mes siguiente.
-    if (day >= closingDay) {
+    // El cierre está en el mismo mes. El día de cierre es INCLUSIVO:
+    // solo los gastos DESPUÉS del día de cierre van al resumen siguiente.
+    if (day > closingDay) {
       month += 1;
       if (month > 11) { month = 0; year += 1; }
     }

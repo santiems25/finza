@@ -3,13 +3,16 @@
 import { useEffect, useState, useCallback } from "react";
 import { Landmark } from "lucide-react";
 import { SavingsOverview } from "@/components/ahorro/savings-overview";
+import { AccountsManager } from "@/components/ahorro/accounts-manager";
 import {
   getSavingsConfig, updateSavingsConfig,
   getExpenses, getIncomes, getFxTransactions,
   addFxTransaction, deleteFxTransaction,
-  getBillingPayments,
+  getBillingPayments, getCreditCards,
+  getAccounts, upsertAccount, deleteAccount,
 } from "@/lib/supabase";
-import type { SavingsConfig, Expense, Income, FxTransaction, BillingPayment } from "@/types";
+import type { SavingsConfig, Expense, Income, FxTransaction, BillingPayment, Account, CreditCard } from "@/types";
+import { Separator } from "@/components/ui/separator";
 
 export default function AhorroPage() {
   const [config, setConfig]               = useState<SavingsConfig | null>(null);
@@ -17,21 +20,27 @@ export default function AhorroPage() {
   const [incomes, setIncomes]             = useState<Income[]>([]);
   const [fxTxs, setFxTxs]                 = useState<FxTransaction[]>([]);
   const [billingPayments, setBillingPayments] = useState<BillingPayment[]>([]);
+  const [accounts, setAccounts]           = useState<Account[]>([]);
+  const [cards, setCards]                 = useState<CreditCard[]>([]);
   const [loading, setLoading]             = useState(true);
 
   const load = useCallback(async () => {
-    const [cfg, exp, inc, fx, bp] = await Promise.all([
+    const [cfg, exp, inc, fx, bp, acc, crd] = await Promise.all([
       getSavingsConfig(),
       getExpenses(),
       getIncomes(),
       getFxTransactions(),
       getBillingPayments(),
+      getAccounts(),
+      getCreditCards(),
     ]);
     setConfig(cfg);
     setExpenses(exp);
     setIncomes(inc);
     setFxTxs(fx);
     setBillingPayments(bp);
+    setAccounts(acc);
+    setCards(crd);
     setLoading(false);
   }, []);
 
@@ -84,6 +93,18 @@ export default function AhorroPage() {
         onUpdateConfig={handleUpdateConfig}
         onAddFx={handleAddFx}
         onDeleteFx={handleDeleteFx}
+      />
+
+      <Separator className="my-6" />
+
+      <AccountsManager
+        accounts={accounts}
+        expenses={expenses}
+        incomes={incomes}
+        cards={cards}
+        billingPayments={billingPayments}
+        onUpsert={async (a) => { await upsertAccount(a); load(); }}
+        onDelete={async (id) => { await deleteAccount(id); load(); }}
       />
     </div>
   );

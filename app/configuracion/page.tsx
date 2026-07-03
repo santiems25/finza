@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { CreditCard, Pencil, Check, X, Trash2, LogOut, Plus } from "lucide-react";
+import { CreditCard, Pencil, Check, X, Trash2, LogOut, Plus, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -14,14 +14,15 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  getCreditCards, upsertCreditCard,
+  getCreditCards, upsertCreditCard, deleteCreditCard,
   getMonthlyConfigs, upsertMonthlyConfig, deleteMonthlyConfig,
+  getAccounts,
   signOut,
 } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import { FinzaLogo } from "@/components/layout/finza-logo";
 import { getMonthName } from "@/lib/utils";
-import type { CreditCard as CreditCardType, CreditCardMonthlyConfig } from "@/types";
+import type { CreditCard as CreditCardType, CreditCardMonthlyConfig, Account } from "@/types";
 
 /** Devuelve los próximos `n` meses (incluyendo el actual) */
 function getMonthRange(pastMonths = 1, futureMonths = 5) {
@@ -38,6 +39,7 @@ export default function ConfiguracionPage() {
   const router = useRouter();
   const [cards, setCards]                   = useState<CreditCardType[]>([]);
   const [monthlyConfigs, setMonthlyConfigs] = useState<CreditCardMonthlyConfig[]>([]);
+  const [accounts, setAccounts]             = useState<Account[]>([]);
   const [loading, setLoading]               = useState(true);
   const [loggingOut, setLoggingOut]         = useState(false);
   const [newCardOpen, setNewCardOpen]        = useState(false);
@@ -56,9 +58,10 @@ export default function ConfiguracionPage() {
   };
 
   const load = useCallback(async () => {
-    const [c, mc] = await Promise.all([getCreditCards(), getMonthlyConfigs()]);
+    const [c, mc, acc] = await Promise.all([getCreditCards(), getMonthlyConfigs(), getAccounts()]);
     setCards(c);
     setMonthlyConfigs(mc);
+    setAccounts(acc);
     setLoading(false);
   }, []);
 
@@ -74,8 +77,19 @@ export default function ConfiguracionPage() {
     }
   };
 
+  const handleDeleteCard = async (card: CreditCardType) => {
+    if (!confirm(`¿Eliminar "${card.name}"? Se eliminarán todos los gastos asociados.`)) return;
+    try {
+      await deleteCreditCard(card.id);
+      toast({ title: `🗑 ${card.name} eliminada` });
+      load();
+    } catch {
+      toast({ title: "Error al eliminar", variant: "destructive" });
+    }
+  };
+
   const handleCreateCard = async (data: {
-    name: string; card_type: "visa" | "master"; closing_day: number; due_day: number;
+    name: string; card_type: "visa" | "master"; closing_day: number; due_day: number; account_id?: string | null;
   }) => {
     try {
       await upsertCreditCard(data);
@@ -162,6 +176,7 @@ export default function ConfiguracionPage() {
               onSaveHabitual={handleSaveHabitual}
               onSaveMonthly={handleSaveMonthly}
               onDeleteMonthly={handleDeleteMonthly}
+              onDeleteCard={handleDeleteCard}
             />
           ))}
         </div>
@@ -173,7 +188,7 @@ export default function ConfiguracionPage() {
           <DialogHeader>
             <DialogTitle>Nueva tarjeta</DialogTitle>
           </DialogHeader>
-          <NewCardForm onSave={handleCreateCard} onCancel={() => setNewCardOpen(false)} />
+          <NewCardForm accounts={accounts} onSave={handleCreateCard} onCancel={() => setNewCardOpen(false)} />
         </DialogContent>
       </Dialog>
     </div>
@@ -183,13 +198,14 @@ export default function ConfiguracionPage() {
 // ─── CardSection ──────────────────────────────────────────────────────────────
 
 function CardSection({
-  card, monthlyConfigs, onSaveHabitual, onSaveMonthly, onDeleteMonthly,
+  card, monthlyConfigs, onSaveHabitual, onSaveMonthly, onDeleteMonthly, onDeleteCard,
 }: {
   card: CreditCardType;
   monthlyConfigs: CreditCardMonthlyConfig[];
   onSaveHabitual: (c: CreditCardType) => void;
   onSaveMonthly: (cfg: Omit<CreditCardMonthlyConfig, "id" | "created_at">) => void;
   onDeleteMonthly: (id: string) => void;
+  onDeleteCard: (c: CreditCardType) => void;
 }) {
   const months = getMonthRange(1, 5);
   const now    = new Date();
@@ -203,6 +219,14 @@ function CardSection({
           </div>
           {card.name}
           <Badge variant="outline" className="capitalize text-xs ml-auto">{card.card_type}</Badge>
+          <Button
+            variant="ghost" size="icon"
+            className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
+            onClick={() => onDeleteCard(card)}
+            title="Eliminar tarjeta"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
         </CardTitle>
       </CardHeader>
 
@@ -423,15 +447,17 @@ function validDay(d: number) { return !isNaN(d) && d >= 1 && d <= 31; }
 // ─── NewCardForm ───────────────────────────────────────────────────────────────
 
 function NewCardForm({
-  onSave, onCancel,
+  accounts, onSave, onCancel,
 }: {
-  onSave: (data: { name: string; card_type: "visa" | "master"; closing_day: number; due_day: number }) => Promise<void>;
+  accounts: Account[];
+  onSave: (data: { name: string; card_type: "visa" | "master"; closing_day: number; due_day: number; account_id?: string | null }) => Promise<void>;
   onCancel: () => void;
 }) {
   const [name,       setName]       = useState("");
   const [cardType,   setCardType]   = useState<"visa" | "master">("visa");
   const [closingDay, setClosingDay] = useState("25");
   const [dueDay,     setDueDay]     = useState("12");
+  const [accountId,  setAccountId]  = useState<string>("");
   const [saving,     setSaving]     = useState(false);
   const [error,      setError]      = useState<string | null>(null);
 
@@ -444,7 +470,13 @@ function NewCardForm({
     if (!validDay(dd)) { setError("Día de vencimiento inválido (1-31)"); return; }
     setSaving(true);
     try {
-      await onSave({ name: name.trim(), card_type: cardType, closing_day: cd, due_day: dd });
+      await onSave({
+        name: name.trim(),
+        card_type: cardType,
+        closing_day: cd,
+        due_day: dd,
+        account_id: accountId || null,
+      });
     } catch {
       setError("Error al guardar");
     } finally {
@@ -470,9 +502,7 @@ function NewCardForm({
       <div>
         <Label className="text-xs mb-1.5 block">Tipo</Label>
         <Select value={cardType} onValueChange={v => setCardType(v as "visa" | "master")}>
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
+          <SelectTrigger><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="visa">Visa</SelectItem>
             <SelectItem value="master">Mastercard</SelectItem>
@@ -480,15 +510,32 @@ function NewCardForm({
         </Select>
       </div>
 
+      {/* Cuenta vinculada */}
+      {accounts.length > 0 && (
+        <div>
+          <Label className="text-xs mb-1.5 block">Cuenta vinculada <span className="text-muted-foreground">(opcional)</span></Label>
+          <Select value={accountId || "none"} onValueChange={v => setAccountId(v === "none" ? "" : v)}>
+            <SelectTrigger><SelectValue placeholder="Sin vincular" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">Sin vincular</SelectItem>
+              {accounts.map(a => (
+                <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-[10px] text-muted-foreground mt-1">
+            Al pagar el resumen se descontará de esta cuenta.
+          </p>
+        </div>
+      )}
+
       {/* Días */}
       <div className="grid grid-cols-2 gap-2">
         <DayInput label="Día de cierre" value={closingDay} onChange={setClosingDay} />
         <DayInput label="Día de vencimiento" value={dueDay} onChange={setDueDay} />
       </div>
 
-      {error && (
-        <p className="text-xs text-destructive">{error}</p>
-      )}
+      {error && <p className="text-xs text-destructive">{error}</p>}
 
       <div className="flex gap-2">
         <Button type="submit" className="flex-1 gap-1.5" disabled={saving}>

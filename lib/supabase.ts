@@ -2,7 +2,7 @@ import { createBrowserClient } from "@supabase/ssr";
 import type {
   CreditCard, CreditCardMonthlyConfig, Expense,
   Income, Investment, Dividend, BillingPayment,
-  SavingsConfig, FxTransaction,
+  SavingsConfig, FxTransaction, Account, ExpenseCustomCategory,
 } from "@/types";
 
 // Cliente browser — usa cookies para que el middleware pueda leer la sesión
@@ -44,6 +44,61 @@ export async function getSession() {
   return session;
 }
 
+// ─── Accounts ─────────────────────────────────────────────────────────────────
+
+export async function getAccounts(): Promise<Account[]> {
+  const { data, error } = await supabase
+    .from("accounts")
+    .select("*")
+    .order("name");
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function upsertAccount(account: Partial<Account>): Promise<Account> {
+  const user_id = await uid();
+  const { data, error } = await supabase
+    .from("accounts")
+    .upsert({ ...account, user_id })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteAccount(id: string): Promise<void> {
+  const { error } = await supabase.from("accounts").delete().eq("id", id);
+  if (error) throw error;
+}
+
+// ─── Custom Categories ────────────────────────────────────────────────────────
+
+export async function getCustomCategories(): Promise<ExpenseCustomCategory[]> {
+  const { data, error } = await supabase
+    .from("expense_categories")
+    .select("*")
+    .order("sort_order")
+    .order("name");
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function upsertCustomCategory(cat: Partial<ExpenseCustomCategory> & { name: string }): Promise<ExpenseCustomCategory> {
+  const user_id = await uid();
+  const { data, error } = await supabase
+    .from("expense_categories")
+    .upsert({ ...cat, user_id })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteCustomCategory(id: string): Promise<void> {
+  const { error } = await supabase.from("expense_categories").delete().eq("id", id);
+  if (error) throw error;
+}
+
 // ─── Credit Cards ─────────────────────────────────────────────────────────────
 
 export async function getCreditCards(): Promise<CreditCard[]> {
@@ -53,6 +108,11 @@ export async function getCreditCards(): Promise<CreditCard[]> {
     .order("card_type");
   if (error) throw error;
   return data ?? [];
+}
+
+export async function deleteCreditCard(id: string): Promise<void> {
+  const { error } = await supabase.from("credit_cards").delete().eq("id", id);
+  if (error) throw error;
 }
 
 export async function upsertCreditCard(card: Partial<CreditCard> & { id?: string }) {

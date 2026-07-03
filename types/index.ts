@@ -22,12 +22,21 @@ export type ExpenseCategory =
   | "regalo"
   | "otros";
 
+export interface Account {
+  id: string;
+  name: string;
+  currency: Currency;
+  account_type: "bank" | "wallet" | "cash";
+  created_at: string;
+}
+
 export interface CreditCard {
   id: string;
   name: string;
   card_type: CardType;
   closing_day: number;
   due_day: number;
+  account_id: string | null;
   created_at: string;
 }
 
@@ -36,10 +45,11 @@ export interface Expense {
   amount: number;
   currency: Currency;
   description: string;
-  category: ExpenseCategory;
+  category: string;         // libre: ExpenseCategory hardcodeada o slug de custom category
   date: string;             // YYYY-MM-DD
   payment_method: PaymentMethod;
   credit_card_id: string | null;
+  account_id: string | null;
   billing_period: string | null; // "Enero 2025"
   billing_month: number | null;  // 0-indexed
   billing_year: number | null;
@@ -47,6 +57,15 @@ export interface Expense {
   total_installments: number;    // 1 = pago único
   installment_number: number;    // 1-based
   notes: string | null;
+  created_at: string;
+}
+
+export interface ExpenseCustomCategory {
+  id: string;
+  name: string;
+  icon: string;
+  color: string;
+  sort_order: number;
   created_at: string;
 }
 
@@ -83,6 +102,7 @@ export interface Income {
   description: string;
   source: IncomeSource;
   date: string;        // YYYY-MM-DD
+  account_id: string | null;
   created_at: string;
 }
 

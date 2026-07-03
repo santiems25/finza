@@ -10,13 +10,16 @@ import {
 import { addExpenses } from "@/lib/supabase";
 import { getBillingPeriod, getMonthName, parseAmount } from "@/lib/utils";
 import type {
-  CreditCard, CreditCardMonthlyConfig, Currency, ExpenseCategory, PaymentMethod
+  CreditCard, CreditCardMonthlyConfig, Currency, ExpenseCategory, PaymentMethod, Account,
+  ExpenseCustomCategory,
 } from "@/types";
 import { CATEGORY_LABELS, CATEGORY_ICONS } from "@/types";
 
 interface Props {
   cards: CreditCard[];
   monthlyConfigs: CreditCardMonthlyConfig[];
+  accounts: Account[];
+  customCategories: ExpenseCustomCategory[];
   onSaved: () => void;
 }
 
@@ -45,16 +48,17 @@ function resolveClosingDay(
   return override?.closing_day ?? card.closing_day;
 }
 
-export function ExpenseForm({ cards, monthlyConfigs, onSaved }: Props) {
+export function ExpenseForm({ cards, monthlyConfigs, accounts, customCategories, onSaved }: Props) {
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     amount: "",
     currency: "ARS" as Currency,
     description: "",
-    category: "otros" as ExpenseCategory,
+    category: "otros" as ExpenseCategory | string,
     date: today,
     payment_method: "efectivo" as PaymentMethod,
     credit_card_id: "",
+    account_id: "",
     installments: "1",
     notes: "",
   });
@@ -63,6 +67,7 @@ export function ExpenseForm({ cards, monthlyConfigs, onSaved }: Props) {
     setForm(prev => ({ ...prev, [field]: value }));
 
   const isCredit     = form.payment_method === "credito";
+  const isCash       = ["efectivo", "debito", "mercado_pago"].includes(form.payment_method);
   const numCuotas    = Math.max(1, parseInt(form.installments) || 1);
   const selectedCard = cards.find(c => c.id === form.credit_card_id);
   const totalAmount  = parseAmount(form.amount);
@@ -106,14 +111,19 @@ export function ExpenseForm({ cards, monthlyConfigs, onSaved }: Props) {
           billing_year   = bp.dueYear;
         }
 
+        // Para crédito: si la tarjeta tiene cuenta vinculada, usar esa
+        const cardAccountId = isCredit && selectedCard ? selectedCard.account_id : null;
+        const resolvedAccountId = cardAccountId ?? (isCash && form.account_id ? form.account_id : null);
+
         return {
           amount:             perCuota,
           currency:           form.currency as Currency,
           description:        form.description,
-          category:           form.category as ExpenseCategory,
-          date:               expenseDate,   // avanza 1 mes por cuota
+          category:           form.category,
+          date:               expenseDate,
           payment_method:     form.payment_method as PaymentMethod,
           credit_card_id:     isCredit && form.credit_card_id ? form.credit_card_id : null,
+          account_id:         resolvedAccountId,
           billing_period,
           billing_month,
           billing_year,
@@ -171,7 +181,7 @@ export function ExpenseForm({ cards, monthlyConfigs, onSaved }: Props) {
       {/* Categoría */}
       <div>
         <Label className="text-xs mb-1.5 block">Categoría</Label>
-        <Select value={form.category} onValueChange={v => set("category", v)}>
+        <Select value={form.category as string} onValueChange={v => set("category", v)}>
           <SelectTrigger><SelectValue /></SelectTrigger>
           <SelectContent>
             {(Object.entries(CATEGORY_LABELS) as [ExpenseCategory, string][]).map(
@@ -183,6 +193,21 @@ export function ExpenseForm({ cards, monthlyConfigs, onSaved }: Props) {
                   </span>
                 </SelectItem>
               )
+            )}
+            {customCategories.length > 0 && (
+              <>
+                <div className="px-2 py-1 text-[10px] text-muted-foreground uppercase tracking-wider">
+                  Personalizadas
+                </div>
+                {customCategories.map(cat => (
+                  <SelectItem key={cat.id} value={`custom_${cat.id}`}>
+                    <span className="flex items-center gap-2">
+                      <span>{cat.icon}</span>
+                      <span>{cat.name}</span>
+                    </span>
+                  </SelectItem>
+                ))}
+              </>
             )}
           </SelectContent>
         </Select>
@@ -213,6 +238,22 @@ export function ExpenseForm({ cards, monthlyConfigs, onSaved }: Props) {
         </Select>
       </div>
 
+      {/* Selector de cuenta para efectivo/débito/MP */}
+      {isCash && accounts.length > 0 && (
+        <div>
+          <Label className="text-xs mb-1.5 block">Cuenta <span className="text-muted-foreground">(opcional)</span></Label>
+          <Select value={form.account_id || "none"} onValueChange={v => set("account_id", v === "none" ? "" : v)}>
+            <SelectTrigger><SelectValue placeholder="Sin especificar" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">Sin especificar</SelectItem>
+              {accounts.map(a => (
+                <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
       {/* Campos de crédito */}
       {isCredit && (
         <>
@@ -232,7 +273,8 @@ export function ExpenseForm({ cards, monthlyConfigs, onSaved }: Props) {
                   // Mes real del próximo cierre: si el día del gasto ya pasó el cierre → mes siguiente
                   const expenseDate = new Date(form.date + "T00:00:00");
                   const expenseDay  = expenseDate.getDate();
-                  const closingMonth = expenseDay < cd
+                  // Cierre inclusivo: si el gasto cae en o antes del cierre, cierra este mes
+                  const closingMonth = expenseDay <= cd
                     ? expenseDate.getMonth()
                     : (expenseDate.getMonth() + 1) % 12;
                   return (

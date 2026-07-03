@@ -13,27 +13,32 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { ExpenseForm } from "@/components/gastos/expense-form";
 import { BillingSummaryTab } from "@/components/gastos/billing-summary-tab";
+import { CategoriesManager } from "@/components/gastos/categories-manager";
 import {
   getCreditCards, getExpenses, deleteExpense, getMonthlyConfigs, getBillingPayments,
+  getAccounts, getCustomCategories, upsertCustomCategory, deleteCustomCategory,
 } from "@/lib/supabase";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import type {
   CreditCard, CreditCardMonthlyConfig, Expense, ExpenseCategory, BillingPayment,
+  Account, ExpenseCustomCategory,
 } from "@/types";
 import {
   CATEGORY_LABELS, CATEGORY_ICONS, CATEGORY_COLORS,
   PAYMENT_METHOD_LABELS, PAYMENT_METHOD_ICONS,
 } from "@/types";
 
-type ActiveTab = "movimientos" | "resumenes";
+type ActiveTab = "movimientos" | "resumenes" | "categorias";
 
 export default function GastosPage() {
-  const [expenses, setExpenses]             = useState<Expense[]>([]);
-  const [cards, setCards]                   = useState<CreditCard[]>([]);
-  const [monthlyConfigs, setMonthlyConfigs] = useState<CreditCardMonthlyConfig[]>([]);
+  const [expenses, setExpenses]               = useState<Expense[]>([]);
+  const [cards, setCards]                     = useState<CreditCard[]>([]);
+  const [monthlyConfigs, setMonthlyConfigs]   = useState<CreditCardMonthlyConfig[]>([]);
   const [billingPayments, setBillingPayments] = useState<BillingPayment[]>([]);
-  const [loading, setLoading]               = useState(true);
+  const [accounts, setAccounts]               = useState<Account[]>([]);
+  const [customCategories, setCustomCategories] = useState<ExpenseCustomCategory[]>([]);
+  const [loading, setLoading]                 = useState(true);
   const [open, setOpen]                     = useState(false);
   const [search, setSearch]                 = useState("");
   const [filterCat, setFilterCat]           = useState<string>("all");
@@ -41,13 +46,16 @@ export default function GastosPage() {
   const { toast } = useToast();
 
   const load = async () => {
-    const [e, c, mc, bp] = await Promise.all([
+    const [e, c, mc, bp, acc, cats] = await Promise.all([
       getExpenses(), getCreditCards(), getMonthlyConfigs(), getBillingPayments(),
+      getAccounts(), getCustomCategories(),
     ]);
     setExpenses(e);
     setCards(c);
     setMonthlyConfigs(mc);
     setBillingPayments(bp);
+    setAccounts(acc);
+    setCustomCategories(cats);
     setLoading(false);
   };
 
@@ -110,7 +118,13 @@ export default function GastosPage() {
             <DialogHeader>
               <DialogTitle>Nuevo gasto</DialogTitle>
             </DialogHeader>
-            <ExpenseForm cards={cards} monthlyConfigs={monthlyConfigs} onSaved={handleSaved} />
+            <ExpenseForm
+              cards={cards}
+              monthlyConfigs={monthlyConfigs}
+              accounts={accounts}
+              customCategories={customCategories}
+              onSaved={handleSaved}
+            />
           </DialogContent>
         </Dialog>
       </div>
@@ -143,6 +157,16 @@ export default function GastosPage() {
               {pendingCount}
             </span>
           )}
+        </button>
+        <button
+          onClick={() => setActiveTab("categorias")}
+          className={`flex-1 text-xs font-medium py-1.5 rounded-md transition-colors ${
+            activeTab === "categorias"
+              ? "bg-background text-foreground shadow"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          Categorías
         </button>
       </div>
 
@@ -191,13 +215,18 @@ export default function GastosPage() {
           ) : (
             <div className="rounded-xl border overflow-hidden">
               {visible.map((expense, i) => {
-                const card   = cards.find(c => c.id === expense.credit_card_id);
-                const colors = CATEGORY_COLORS[expense.category as ExpenseCategory];
+                const card       = cards.find(c => c.id === expense.credit_card_id);
+                const stdColors  = CATEGORY_COLORS[expense.category as ExpenseCategory];
+                const customCat  = customCategories.find(c => `custom_${c.id}` === expense.category);
+                const catIcon    = CATEGORY_ICONS[expense.category as ExpenseCategory] ?? customCat?.icon ?? "📦";
+                const catLabel   = CATEGORY_LABELS[expense.category as ExpenseCategory] ?? customCat?.name ?? expense.category;
+                const catBg      = stdColors?.bg  ?? "bg-slate-500/15";
+                const catText    = stdColors?.text ?? "text-slate-400";
                 return (
                   <div key={expense.id}>
                     <div className="flex items-center gap-3 px-4 py-3 bg-card">
-                      <div className={`h-9 w-9 rounded-xl flex items-center justify-center shrink-0 text-base ${colors.bg}`}>
-                        {CATEGORY_ICONS[expense.category as ExpenseCategory]}
+                      <div className={`h-9 w-9 rounded-xl flex items-center justify-center shrink-0 text-base ${catBg}`}>
+                        {catIcon}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5">
@@ -209,8 +238,8 @@ export default function GastosPage() {
                           )}
                         </div>
                         <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                          <span className={`text-[10px] font-medium ${colors.text}`}>
-                            {CATEGORY_LABELS[expense.category as ExpenseCategory]}
+                          <span className={`text-[10px] font-medium ${catText}`}>
+                            {catLabel}
                           </span>
                           <span className="text-muted-foreground text-[10px]">·</span>
                           <span className="text-[10px] text-muted-foreground">
@@ -259,6 +288,15 @@ export default function GastosPage() {
           monthlyConfigs={monthlyConfigs}
           billingPayments={billingPayments}
           onPaymentToggled={load}
+        />
+      )}
+
+      {/* ── Tab: Categorías ── */}
+      {activeTab === "categorias" && (
+        <CategoriesManager
+          categories={customCategories}
+          onUpsert={async (cat) => { await upsertCustomCategory(cat); load(); }}
+          onDelete={async (id) => { await deleteCustomCategory(id); load(); }}
         />
       )}
     </div>

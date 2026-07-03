@@ -309,15 +309,19 @@ function BillingGroupCard({
             <Separator />
             <div className="divide-y divide-border/40">
               {group.expenses.map(expense => {
-                const colors = CATEGORY_COLORS[expense.category as ExpenseCategory];
+                const colors   = CATEGORY_COLORS[expense.category as ExpenseCategory];
+                const catIcon  = CATEGORY_ICONS[expense.category as ExpenseCategory] ?? "📦";
+                const catLabel = CATEGORY_LABELS[expense.category as ExpenseCategory] ?? expense.category;
+                const catBg    = colors?.bg   ?? "bg-slate-500/15";
+                const catText  = colors?.text ?? "text-slate-400";
                 return (
                   <div key={expense.id} className="flex items-center gap-3 px-4 py-2.5">
-                    <span className="text-base shrink-0">{CATEGORY_ICONS[expense.category as ExpenseCategory]}</span>
+                    <span className="text-base shrink-0">{catIcon}</span>
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-medium truncate">{expense.description}</p>
                       <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                        <span className={`text-[10px] px-1 py-0.5 rounded font-medium ${colors.bg} ${colors.text}`}>
-                          {CATEGORY_LABELS[expense.category as ExpenseCategory]}
+                        <span className={`text-[10px] px-1 py-0.5 rounded font-medium ${catBg} ${catText}`}>
+                          {catLabel}
                         </span>
                         {expense.total_installments > 1 && (
                           <span className="text-[10px] text-muted-foreground">
