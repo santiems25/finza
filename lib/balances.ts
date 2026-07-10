@@ -71,31 +71,16 @@ export function accountBalance(account: Account, data: BalanceData): { ars: numb
 }
 
 /**
- * Saldo TOTAL = suma de saldos iniciales de las cuentas + TODOS los flujos
- * (incluye movimientos sin cuenta asignada, para no perder datos legacy).
- * Las transferencias entre cuentas no afectan el total.
+ * Saldo TOTAL = suma exacta de los saldos de todas las cuentas.
+ * Los movimientos sin cuenta asignada no se cuentan.
  */
 export function totalBalance(accounts: Account[], data: BalanceData): { ars: number; usd: number } {
-  const { expenses, incomes, billingPayments, fxTransactions } = data;
-
-  let ars = accounts.reduce((s, a) => s + a.initial_ars, 0);
-  let usd = accounts.reduce((s, a) => s + a.initial_usd, 0);
-
-  for (const i of incomes) {
-    if (i.currency === "ARS") ars += i.amount; else usd += i.amount;
+  let ars = 0, usd = 0;
+  for (const a of accounts) {
+    const b = accountBalance(a, data);
+    ars += b.ars;
+    usd += b.usd;
   }
-  for (const e of expenses) {
-    const counts =
-      CASH_METHODS.includes(e.payment_method) ||
-      (e.payment_method === "credito" && isTCPaid(e, billingPayments));
-    if (!counts) continue;
-    if (e.currency === "ARS") ars -= e.amount; else usd -= e.amount;
-  }
-  for (const fx of fxTransactions) {
-    ars -= fx.ars_amount;
-    usd += fx.usd_amount;
-  }
-
   return { ars, usd };
 }
 
