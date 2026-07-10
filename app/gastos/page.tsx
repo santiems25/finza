@@ -18,16 +18,13 @@ import {
   getCreditCards, getExpenses, deleteExpense, getMonthlyConfigs, getBillingPayments,
   getAccounts, getCustomCategories, upsertCustomCategory, deleteCustomCategory,
 } from "@/lib/supabase";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, getCategoryMeta } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import type {
-  CreditCard, CreditCardMonthlyConfig, Expense, ExpenseCategory, BillingPayment,
+  CreditCard, CreditCardMonthlyConfig, Expense, BillingPayment,
   Account, ExpenseCustomCategory,
 } from "@/types";
-import {
-  CATEGORY_LABELS, CATEGORY_ICONS, CATEGORY_COLORS,
-  PAYMENT_METHOD_LABELS, PAYMENT_METHOD_ICONS,
-} from "@/types";
+import { PAYMENT_METHOD_LABELS, PAYMENT_METHOD_ICONS } from "@/types";
 
 type ActiveTab = "movimientos" | "resumenes" | "categorias";
 
@@ -190,13 +187,11 @@ export default function GastosPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todas</SelectItem>
-                {(Object.entries(CATEGORY_LABELS) as [ExpenseCategory, string][]).map(
-                  ([value, label]) => (
-                    <SelectItem key={value} value={value}>
-                      {CATEGORY_ICONS[value]} {label}
-                    </SelectItem>
-                  )
-                )}
+                {customCategories.map(cat => (
+                  <SelectItem key={cat.id} value={`custom_${cat.id}`}>
+                    {cat.icon} {cat.name}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -215,13 +210,9 @@ export default function GastosPage() {
           ) : (
             <div className="rounded-xl border overflow-hidden">
               {visible.map((expense, i) => {
-                const card       = cards.find(c => c.id === expense.credit_card_id);
-                const stdColors  = CATEGORY_COLORS[expense.category as ExpenseCategory];
-                const customCat  = customCategories.find(c => `custom_${c.id}` === expense.category);
-                const catIcon    = CATEGORY_ICONS[expense.category as ExpenseCategory] ?? customCat?.icon ?? "📦";
-                const catLabel   = CATEGORY_LABELS[expense.category as ExpenseCategory] ?? customCat?.name ?? expense.category;
-                const catBg      = stdColors?.bg  ?? "bg-slate-500/15";
-                const catText    = stdColors?.text ?? "text-slate-400";
+                const card = cards.find(c => c.id === expense.credit_card_id);
+                const { icon: catIcon, label: catLabel, bg: catBg, text: catText } =
+                  getCategoryMeta(expense.category, customCategories);
                 return (
                   <div key={expense.id}>
                     <div className="flex items-center gap-3 px-4 py-3 bg-card">
@@ -287,6 +278,7 @@ export default function GastosPage() {
           cards={cards}
           monthlyConfigs={monthlyConfigs}
           billingPayments={billingPayments}
+          customCategories={customCategories}
           onPaymentToggled={load}
         />
       )}

@@ -8,14 +8,13 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { formatCurrency, formatDate, getMonthName, getDueDate } from "@/lib/utils";
+import { formatCurrency, formatDate, getMonthName, getDueDate, getCategoryMeta } from "@/lib/utils";
 import { markBillingAsPaid, unmarkBillingAsPaid } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import type {
   CreditCard as CreditCardType, CreditCardMonthlyConfig, Expense, BillingPayment,
-  ExpenseCategory,
+  ExpenseCustomCategory,
 } from "@/types";
-import { CATEGORY_LABELS, CATEGORY_ICONS, CATEGORY_COLORS, PAYMENT_METHOD_LABELS } from "@/types";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -36,6 +35,7 @@ interface Props {
   cards: CreditCardType[];
   monthlyConfigs: CreditCardMonthlyConfig[];
   billingPayments: BillingPayment[];
+  customCategories: ExpenseCustomCategory[];
   onPaymentToggled: () => void;
 }
 
@@ -109,7 +109,7 @@ function daysUntilDue(dueDate: Date): number {
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 
-export function BillingSummaryTab({ expenses, cards, monthlyConfigs, billingPayments, onPaymentToggled }: Props) {
+export function BillingSummaryTab({ expenses, cards, monthlyConfigs, billingPayments, customCategories, onPaymentToggled }: Props) {
   const { toast } = useToast();
   const [loading, setLoading] = useState<string | null>(null);
 
@@ -160,6 +160,7 @@ export function BillingSummaryTab({ expenses, cards, monthlyConfigs, billingPaym
               key={`${group.card.id}-${group.billingYear}-${group.billingMonth}`}
               group={group}
               loading={loading}
+              customCategories={customCategories}
               onToggle={handleToggle}
             />
           ))}
@@ -177,6 +178,7 @@ export function BillingSummaryTab({ expenses, cards, monthlyConfigs, billingPaym
               key={`${group.card.id}-${group.billingYear}-${group.billingMonth}`}
               group={group}
               loading={loading}
+              customCategories={customCategories}
               onToggle={handleToggle}
             />
           ))}
@@ -189,10 +191,11 @@ export function BillingSummaryTab({ expenses, cards, monthlyConfigs, billingPaym
 // ─── BillingGroupCard ─────────────────────────────────────────────────────────
 
 function BillingGroupCard({
-  group, loading, onToggle,
+  group, loading, customCategories, onToggle,
 }: {
   group: BillingGroup;
   loading: string | null;
+  customCategories: ExpenseCustomCategory[];
   onToggle: (g: BillingGroup) => void;
 }) {
   const [expanded, setExpanded] = useState(!group.isPaid);
@@ -301,11 +304,8 @@ function BillingGroupCard({
             <Separator />
             <div className="divide-y divide-border/40">
               {group.expenses.map(expense => {
-                const colors   = CATEGORY_COLORS[expense.category as ExpenseCategory];
-                const catIcon  = CATEGORY_ICONS[expense.category as ExpenseCategory] ?? "📦";
-                const catLabel = CATEGORY_LABELS[expense.category as ExpenseCategory] ?? expense.category;
-                const catBg    = colors?.bg   ?? "bg-slate-500/15";
-                const catText  = colors?.text ?? "text-slate-400";
+                const { icon: catIcon, label: catLabel, bg: catBg, text: catText } =
+                  getCategoryMeta(expense.category, customCategories);
                 return (
                   <div key={expense.id} className="flex items-center gap-3 px-4 py-2.5">
                     <span className="text-base shrink-0">{catIcon}</span>

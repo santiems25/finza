@@ -33,7 +33,7 @@ export function CategoriesManager({ categories, onUpsert, onDelete }: Props) {
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-          Categorías personalizadas
+          Tus categorías
         </p>
         <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs" onClick={openNew}>
           <Plus className="h-3.5 w-3.5" /> Nueva
@@ -42,7 +42,7 @@ export function CategoriesManager({ categories, onUpsert, onDelete }: Props) {
 
       {categories.length === 0 ? (
         <p className="text-xs text-muted-foreground text-center py-4">
-          No hay categorías personalizadas todavía.
+          No tenés categorías todavía. Creá las que necesites para tus gastos.
         </p>
       ) : (
         categories.map(cat => (

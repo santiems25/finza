@@ -101,7 +101,6 @@ export function InvestmentForm({ onSaved }: Props) {
             placeholder="10 o 2/120"
             value={form.quantity}
             onChange={e => set("quantity", e.target.value)}
-            inputMode="decimal"
             required
           />
           {qtyPreview && (

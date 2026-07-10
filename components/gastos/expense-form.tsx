@@ -10,10 +10,9 @@ import {
 import { addExpenses } from "@/lib/supabase";
 import { getBillingPeriodForCard, getMonthName, parseAmount } from "@/lib/utils";
 import type {
-  CreditCard, CreditCardMonthlyConfig, Currency, ExpenseCategory, PaymentMethod, Account,
+  CreditCard, CreditCardMonthlyConfig, Currency, PaymentMethod, Account,
   ExpenseCustomCategory,
 } from "@/types";
-import { CATEGORY_LABELS, CATEGORY_ICONS } from "@/types";
 
 interface Props {
   cards: CreditCard[];
@@ -39,7 +38,7 @@ export function ExpenseForm({ cards, monthlyConfigs, accounts, customCategories,
     amount: "",
     currency: "ARS" as Currency,
     description: "",
-    category: "otros" as ExpenseCategory | string,
+    category: customCategories[0] ? `custom_${customCategories[0].id}` : "",
     date: today,
     payment_method: "efectivo" as PaymentMethod,
     credit_card_id: "",
@@ -58,6 +57,15 @@ export function ExpenseForm({ cards, monthlyConfigs, accounts, customCategories,
   const totalAmount  = parseAmount(form.amount);
   const perCuota     = numCuotas > 1 ? totalAmount / numCuotas : totalAmount;
 
+  // Cuenta automática según medio de pago:
+  //   Mercado Pago → cuenta tipo "wallet" · Efectivo → cuenta tipo "cash"
+  //   Débito → el usuario elige · Crédito → cuenta vinculada a la tarjeta
+  const autoAccount =
+    form.payment_method === "mercado_pago" ? accounts.find(a => a.account_type === "wallet")
+    : form.payment_method === "efectivo"   ? accounts.find(a => a.account_type === "cash")
+    : undefined;
+  const needsAccountSelect = isCash && !autoAccount && accounts.length > 0;
+
   // Preview del primer período (usa fechas exactas de cierre si están configuradas)
   const firstPeriod = isCredit && selectedCard
     ? getBillingPeriodForCard(form.date, selectedCard, monthlyConfigs)
@@ -65,7 +73,7 @@ export function ExpenseForm({ cards, monthlyConfigs, accounts, customCategories,
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.amount || !form.description) return;
+    if (!form.amount || !form.description || !form.category) return;
     if (isCredit && !form.credit_card_id) return;
     setSaving(true);
 
@@ -90,9 +98,13 @@ export function ExpenseForm({ cards, monthlyConfigs, accounts, customCategories,
           billing_year   = bp.billingYear;
         }
 
-        // Para crédito: si la tarjeta tiene cuenta vinculada, usar esa
+        // Cuenta resuelta: crédito → cuenta de la tarjeta;
+        // MP/efectivo → cuenta automática por tipo; débito → elegida
         const cardAccountId = isCredit && selectedCard ? selectedCard.account_id : null;
-        const resolvedAccountId = cardAccountId ?? (isCash && form.account_id ? form.account_id : null);
+        const resolvedAccountId =
+          cardAccountId ??
+          autoAccount?.id ??
+          (isCash && form.account_id ? form.account_id : null);
 
         return {
           amount:             perCuota,
@@ -160,36 +172,25 @@ export function ExpenseForm({ cards, monthlyConfigs, accounts, customCategories,
       {/* Categoría */}
       <div>
         <Label className="text-xs mb-1.5 block">Categoría</Label>
-        <Select value={form.category as string} onValueChange={v => set("category", v)}>
-          <SelectTrigger><SelectValue /></SelectTrigger>
-          <SelectContent>
-            {(Object.entries(CATEGORY_LABELS) as [ExpenseCategory, string][]).map(
-              ([value, label]) => (
-                <SelectItem key={value} value={value}>
+        {customCategories.length === 0 ? (
+          <p className="text-xs text-muted-foreground rounded-lg border border-dashed px-3 py-2.5">
+            No tenés categorías. Creá una en la solapa <strong>Categorías</strong>.
+          </p>
+        ) : (
+          <Select value={form.category} onValueChange={v => set("category", v)}>
+            <SelectTrigger><SelectValue placeholder="Elegí una categoría" /></SelectTrigger>
+            <SelectContent>
+              {customCategories.map(cat => (
+                <SelectItem key={cat.id} value={`custom_${cat.id}`}>
                   <span className="flex items-center gap-2">
-                    <span>{CATEGORY_ICONS[value]}</span>
-                    <span>{label}</span>
+                    <span>{cat.icon}</span>
+                    <span>{cat.name}</span>
                   </span>
                 </SelectItem>
-              )
-            )}
-            {customCategories.length > 0 && (
-              <>
-                <div className="px-2 py-1 text-[10px] text-muted-foreground uppercase tracking-wider">
-                  Personalizadas
-                </div>
-                {customCategories.map(cat => (
-                  <SelectItem key={cat.id} value={`custom_${cat.id}`}>
-                    <span className="flex items-center gap-2">
-                      <span>{cat.icon}</span>
-                      <span>{cat.name}</span>
-                    </span>
-                  </SelectItem>
-                ))}
-              </>
-            )}
-          </SelectContent>
-        </Select>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
       </div>
 
       {/* Fecha */}
@@ -217,12 +218,17 @@ export function ExpenseForm({ cards, monthlyConfigs, accounts, customCategories,
         </Select>
       </div>
 
-      {/* Selector de cuenta para efectivo/débito/MP */}
-      {isCash && accounts.length > 0 && (
+      {/* Cuenta: automática para MP/efectivo, selector para débito */}
+      {isCash && autoAccount && (
+        <p className="text-[11px] text-muted-foreground rounded-lg bg-muted/40 px-3 py-2">
+          Se descuenta de <strong className="text-foreground">{autoAccount.name}</strong>
+        </p>
+      )}
+      {needsAccountSelect && (
         <div>
-          <Label className="text-xs mb-1.5 block">Cuenta <span className="text-muted-foreground">(opcional)</span></Label>
+          <Label className="text-xs mb-1.5 block">Cuenta</Label>
           <Select value={form.account_id || "none"} onValueChange={v => set("account_id", v === "none" ? "" : v)}>
-            <SelectTrigger><SelectValue placeholder="Sin especificar" /></SelectTrigger>
+            <SelectTrigger><SelectValue placeholder="Elegí una cuenta" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="none">Sin especificar</SelectItem>
               {accounts.map(a => (

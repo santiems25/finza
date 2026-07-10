@@ -14,17 +14,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import {
   getCreditCards, getExpenses, getIncomes, deleteIncome,
   getBillingPayments, markBillingAsPaid, unmarkBillingAsPaid,
+  getCustomCategories,
 } from "@/lib/supabase";
-import { formatCurrency, getMonthName } from "@/lib/utils";
+import { formatCurrency, getMonthName, getCategoryMeta } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { IncomeForm } from "./income-form";
 import type {
-  CreditCard as CreditCardType, Expense, Income, BillingPayment, ExpenseCategory,
+  CreditCard as CreditCardType, Expense, Income, BillingPayment, ExpenseCustomCategory,
 } from "@/types";
-import {
-  CATEGORY_LABELS, CATEGORY_ICONS, CATEGORY_COLORS,
-  INCOME_SOURCE_ICONS, INCOME_SOURCE_LABELS,
-} from "@/types";
+import { INCOME_SOURCE_ICONS, INCOME_SOURCE_LABELS } from "@/types";
 
 interface CardBillingEntry {
   card: CreditCardType;
@@ -51,17 +49,19 @@ export function DashboardContent() {
   const [incomes,         setIncomes]         = useState<Income[]>([]);
   const [cards,           setCards]           = useState<CreditCardType[]>([]);
   const [billingPayments, setBillingPayments] = useState<BillingPayment[]>([]);
+  const [customCategories, setCustomCategories] = useState<ExpenseCustomCategory[]>([]);
   const [loading,         setLoading]         = useState(true);
   const { toast } = useToast();
 
   const load = useCallback(async () => {
-    const [e, i, c, bp] = await Promise.all([
-      getExpenses(), getIncomes(), getCreditCards(), getBillingPayments(),
+    const [e, i, c, bp, cats] = await Promise.all([
+      getExpenses(), getIncomes(), getCreditCards(), getBillingPayments(), getCustomCategories(),
     ]);
     setExpenses(e);
     setIncomes(i);
     setCards(c);
     setBillingPayments(bp);
+    setCustomCategories(cats);
     setLoading(false);
   }, []);
 
@@ -227,6 +227,7 @@ export function DashboardContent() {
           totals={categoryTotalsARS}
           currency="ARS"
           selectedCategory={selectedCategory}
+          customCategories={customCategories}
           onSelect={setSelectedCategory}
         />
       )}
@@ -238,6 +239,7 @@ export function DashboardContent() {
           totals={categoryTotalsUSD}
           currency="USD"
           selectedCategory={selectedCategory}
+          customCategories={customCategories}
           onSelect={setSelectedCategory}
         />
       )}
@@ -268,7 +270,7 @@ export function DashboardContent() {
             <div className="flex items-center justify-between">
               <CardTitle className="text-sm font-semibold">
                 {selectedCategory
-                  ? `${CATEGORY_ICONS[selectedCategory as ExpenseCategory] ?? "📦"} ${CATEGORY_LABELS[selectedCategory as ExpenseCategory] ?? selectedCategory}`
+                  ? `${getCategoryMeta(selectedCategory, customCategories).icon} ${getCategoryMeta(selectedCategory, customCategories).label}`
                   : "Últimos gastos"}
               </CardTitle>
               {selectedCategory && (
@@ -284,12 +286,9 @@ export function DashboardContent() {
           </CardHeader>
           <CardContent className="p-0">
             {filtered.slice(0, 8).map((expense, i) => {
-              const card     = cards.find(c => c.id === expense.credit_card_id);
-              const colors   = CATEGORY_COLORS[expense.category as ExpenseCategory];
-              const catIcon  = CATEGORY_ICONS[expense.category as ExpenseCategory] ?? "📦";
-              const catLabel = CATEGORY_LABELS[expense.category as ExpenseCategory] ?? expense.category;
-              const catBg    = colors?.bg   ?? "bg-slate-500/15";
-              const catText  = colors?.text ?? "text-slate-400";
+              const card = cards.find(c => c.id === expense.credit_card_id);
+              const { icon: catIcon, label: catLabel, bg: catBg, text: catText } =
+                getCategoryMeta(expense.category, customCategories);
               return (
                 <div key={expense.id}>
                   <div className="flex items-center gap-3 px-5 py-3">
@@ -431,12 +430,13 @@ function BalanceCard({
 // ─── CategoryBreakdown ────────────────────────────────────────────────────────
 
 function CategoryBreakdown({
-  title, totals, currency, selectedCategory, onSelect,
+  title, totals, currency, selectedCategory, customCategories, onSelect,
 }: {
   title: string;
   totals: { category: string; total: number; percent: number }[];
   currency: "ARS" | "USD";
   selectedCategory: string | null;
+  customCategories: ExpenseCustomCategory[];
   onSelect: (cat: string | null) => void;
 }) {
   return (
@@ -446,7 +446,7 @@ function CategoryBreakdown({
       </CardHeader>
       <CardContent className="p-4 pt-0 space-y-2.5">
         {totals.map(({ category, total, percent }) => {
-          const colors = CATEGORY_COLORS[category as ExpenseCategory];
+          const meta   = getCategoryMeta(category, customCategories);
           const active = selectedCategory === category;
           return (
             <button
@@ -458,8 +458,8 @@ function CategoryBreakdown({
             >
               <div className="flex items-center justify-between mb-1">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-sm">{CATEGORY_ICONS[category as ExpenseCategory] ?? "📦"}</span>
-                  <span className="text-xs font-medium">{CATEGORY_LABELS[category as ExpenseCategory] ?? category}</span>
+                  <span className="text-sm">{meta.icon}</span>
+                  <span className="text-xs font-medium">{meta.label}</span>
                   {active && <Badge variant="outline" className="text-[10px] h-4 px-1">filtro</Badge>}
                 </div>
                 <div className="flex items-center gap-2">
@@ -470,7 +470,7 @@ function CategoryBreakdown({
                 </div>
               </div>
               <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
-                <div className={`h-full rounded-full ${colors?.bar ?? "bg-slate-500"}`} style={{ width: `${percent}%` }} />
+                <div className={`h-full rounded-full ${meta.bar}`} style={{ width: `${percent}%` }} />
               </div>
             </button>
           );

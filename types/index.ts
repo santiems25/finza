@@ -85,6 +85,18 @@ export interface FxTransaction {
   exchange_rate: number;
   date: string;
   notes: string | null;
+  account_id: string | null;
+  created_at: string;
+}
+
+export interface AccountTransfer {
+  id: string;
+  from_account_id: string;
+  to_account_id: string;
+  amount: number;
+  currency: Currency;
+  date: string;
+  notes: string | null;
   created_at: string;
 }
 

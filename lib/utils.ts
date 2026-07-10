@@ -1,6 +1,30 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
-import type { CreditCard, CreditCardMonthlyConfig } from "@/types";
+import type { CreditCard, CreditCardMonthlyConfig, ExpenseCustomCategory, ExpenseCategory } from "@/types";
+import { CATEGORY_LABELS, CATEGORY_ICONS, CATEGORY_COLORS } from "@/types";
+
+/**
+ * Resuelve label/icono/colores de una categoría, sea personalizada
+ * ("custom_<uuid>") o un slug legacy de las categorías base.
+ */
+export function getCategoryMeta(
+  category: string,
+  customCategories: ExpenseCustomCategory[]
+): { label: string; icon: string; bg: string; text: string; bar: string } {
+  const custom = customCategories.find(c => `custom_${c.id}` === category);
+  if (custom) {
+    const [bg = "bg-slate-500/15", text = "text-slate-400"] = (custom.color ?? "").split(" ");
+    return { label: custom.name, icon: custom.icon, bg, text, bar: "bg-slate-500" };
+  }
+  const colors = CATEGORY_COLORS[category as ExpenseCategory];
+  return {
+    label: CATEGORY_LABELS[category as ExpenseCategory] ?? category,
+    icon:  CATEGORY_ICONS[category as ExpenseCategory]  ?? "📦",
+    bg:    colors?.bg   ?? "bg-slate-500/15",
+    text:  colors?.text ?? "text-slate-400",
+    bar:   colors?.bar  ?? "bg-slate-500",
+  };
+}
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -176,12 +200,13 @@ export function getDueDate(
 /**
  * Asigna un gasto al resumen correcto usando FECHAS reales de cierre.
  *
- * El resumen M abarca los gastos posteriores al cierre del resumen M-1
- * y hasta el cierre del resumen M (inclusive).
+ * El resumen M abarca los gastos desde el día del cierre del resumen M-1
+ * (inclusive) hasta el día ANTERIOR al cierre del resumen M.
+ * El día del cierre ya pertenece al resumen siguiente.
  *
  * Ejemplo: resumen Junio cierra el 2-julio, resumen Mayo cerró el 2-junio.
- *   Gasto 1-julio → después del 2-junio y <= 2-julio → resumen JUNIO ✓
- *   Gasto 3-julio → después del 2-julio → resumen JULIO ✓
+ *   Gasto 1-julio → antes del 2-julio → resumen JUNIO ✓
+ *   Gasto 2-julio → día del cierre  → resumen JULIO ✓
  */
 export function getBillingPeriodForCard(
   expenseDate: string,
@@ -202,7 +227,7 @@ export function getBillingPeriodForCard(
     const prevRef  = new Date(year, month - 1, 1);
     const prevClose = getClosingDate(prevRef.getMonth(), prevRef.getFullYear(), card, configs);
 
-    if (d > prevClose && d <= close) {
+    if (d >= prevClose && d < close) {
       return {
         periodLabel:  `${MONTH_NAMES[month]} ${year}`,
         billingMonth: month,

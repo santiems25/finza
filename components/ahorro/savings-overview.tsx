@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import {
-  Pencil, Check, X, Trash2, ChevronDown, ChevronUp,
+  Trash2, ChevronDown, ChevronUp,
   ArrowRightLeft, AlertTriangle,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,101 +11,43 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { formatCurrency, formatDate, parseAmount } from "@/lib/utils";
-import type { SavingsConfig, Expense, Income, FxTransaction, BillingPayment } from "@/types";
+import { totalBalance, pendingTC, type BalanceData } from "@/lib/balances";
+import type { Account, FxTransaction } from "@/types";
 
 const today = new Date().toISOString().split("T")[0];
 
 interface Props {
-  config: SavingsConfig | null;
-  expenses: Expense[];
-  incomes: Income[];
-  fxTransactions: FxTransaction[];
-  billingPayments: BillingPayment[];
-  onUpdateConfig: (ars: number, usd: number) => Promise<void>;
+  accounts: Account[];
+  data: BalanceData;
   onAddFx: (tx: Omit<FxTransaction, "id" | "created_at">) => Promise<void>;
   onDeleteFx: (id: string) => Promise<void>;
 }
 
-// Solo efectivo/débito/MP mueve la caja inmediatamente
-const CASH_METHODS = ["efectivo", "debito", "mercado_pago"] as const;
-
-export function SavingsOverview({
-  config, expenses, incomes, fxTransactions, billingPayments,
-  onUpdateConfig, onAddFx, onDeleteFx,
-}: Props) {
+export function SavingsOverview({ accounts, data, onAddFx, onDeleteFx }: Props) {
   const [fxOpen, setFxOpen] = useState(false);
 
-  // ── Helpers ─────────────────────────────────────────────────────────────────
-  const isTCPaid = (e: Expense) =>
-    billingPayments.some(
-      p =>
-        p.credit_card_id === e.credit_card_id &&
-        p.billing_month  === e.billing_month  &&
-        p.billing_year   === e.billing_year
-    );
-
-  // ── Cálculo de saldos ───────────────────────────────────────────────────────
-  const initialARS = config?.initial_ars ?? 0;
-  const initialUSD = config?.initial_usd ?? 0;
-
-  const incomeARS = incomes.filter(i => i.currency === "ARS").reduce((s, i) => s + i.amount, 0);
-  const incomeUSD = incomes.filter(i => i.currency === "USD").reduce((s, i) => s + i.amount, 0);
-
-  // Gastos en cash (no crédito)
-  const cashExpARS = expenses
-    .filter(e => e.currency === "ARS" && (CASH_METHODS as readonly string[]).includes(e.payment_method))
-    .reduce((s, e) => s + e.amount, 0);
-  const cashExpUSD = expenses
-    .filter(e => e.currency === "USD" && (CASH_METHODS as readonly string[]).includes(e.payment_method))
-    .reduce((s, e) => s + e.amount, 0);
-
-  // TC pagados → se descuentan del saldo
-  const paidTC_ARS = expenses
-    .filter(e => e.currency === "ARS" && e.payment_method === "credito" && isTCPaid(e))
-    .reduce((s, e) => s + e.amount, 0);
-  const paidTC_USD = expenses
-    .filter(e => e.currency === "USD" && e.payment_method === "credito" && isTCPaid(e))
-    .reduce((s, e) => s + e.amount, 0);
-
-  // TC pendientes (no pagados) → solo para el aviso
-  const pendingTC_ARS = expenses
-    .filter(e => e.currency === "ARS" && e.payment_method === "credito" && !isTCPaid(e))
-    .reduce((s, e) => s + e.amount, 0);
-  const pendingTC_USD = expenses
-    .filter(e => e.currency === "USD" && e.payment_method === "credito" && !isTCPaid(e))
-    .reduce((s, e) => s + e.amount, 0);
-
-  // FX
-  const fxARS = fxTransactions.reduce((s, t) => s + t.ars_amount, 0);
-  const fxUSD = fxTransactions.reduce((s, t) => s + t.usd_amount, 0);
-
-  const balanceARS   = initialARS + incomeARS - cashExpARS - fxARS - paidTC_ARS;
-  const balanceUSD   = initialUSD + incomeUSD - cashExpUSD + fxUSD - paidTC_USD;
-  const projectedARS = balanceARS - pendingTC_ARS;
-  const projectedUSD = balanceUSD - pendingTC_USD;
+  const balance = totalBalance(accounts, data);
+  const pending = pendingTC(data.expenses, data.billingPayments);
 
   return (
     <div className="space-y-4">
       {/* ── Saldo ARS ── */}
       <SaldoCard
         currency="ARS"
-        balance={balanceARS}
-        projected={projectedARS}
-        pendingTC={pendingTC_ARS}
-        config={config}
-        onUpdateConfig={onUpdateConfig}
+        balance={balance.ars}
+        pendingTC={pending.ars}
       />
 
       {/* ── Saldo USD ── */}
       <SaldoCard
         currency="USD"
-        balance={balanceUSD}
-        projected={projectedUSD}
-        pendingTC={pendingTC_USD}
-        config={config}
-        onUpdateConfig={onUpdateConfig}
+        balance={balance.usd}
+        pendingTC={pending.usd}
       />
 
       {/* ── Compra de dólares ── */}
@@ -118,8 +60,8 @@ export function SavingsOverview({
       </Button>
 
       {/* ── Historial FX ── */}
-      {fxTransactions.length > 0 && (
-        <FxHistory transactions={fxTransactions} onDelete={onDeleteFx} />
+      {data.fxTransactions.length > 0 && (
+        <FxHistory transactions={data.fxTransactions} accounts={accounts} onDelete={onDeleteFx} />
       )}
 
       {/* ── Dialog compra FX ── */}
@@ -129,6 +71,7 @@ export function SavingsOverview({
             <DialogTitle>Comprar dólares</DialogTitle>
           </DialogHeader>
           <FxForm
+            accounts={accounts}
             onSaved={async tx => { await onAddFx(tx); setFxOpen(false); }}
             onCancel={() => setFxOpen(false)}
           />
@@ -141,82 +84,28 @@ export function SavingsOverview({
 // ─── SaldoCard ────────────────────────────────────────────────────────────────
 
 function SaldoCard({
-  currency, balance, projected, pendingTC, config, onUpdateConfig,
+  currency, balance, pendingTC,
 }: {
   currency: "ARS" | "USD";
   balance: number;
-  projected: number;
   pendingTC: number;
-  config: SavingsConfig | null;
-  onUpdateConfig: (ars: number, usd: number) => Promise<void>;
 }) {
-  const [editInitial, setEditInitial] = useState(false);
-  const [initialInput, setInitialInput] = useState("");
-  const [saving, setSaving] = useState(false);
-
-  const isARS     = currency === "ARS";
-  const label     = isARS ? "Pesos (ARS)" : "Dólares (USD)";
+  const label      = currency === "ARS" ? "Pesos (ARS)" : "Dólares (USD)";
   const isPositive = balance >= 0;
   const hasPending = pendingTC > 0;
-
-  const handleSaveInitial = async () => {
-    if (!config) return;
-    const val = parseAmount(initialInput);
-    if (isNaN(val) || val < 0) return;
-    setSaving(true);
-    await onUpdateConfig(
-      isARS ? val : config.initial_ars,
-      isARS ? config.initial_usd : val
-    );
-    setSaving(false);
-    setEditInitial(false);
-  };
+  const projected  = balance - pendingTC;
 
   return (
     <Card className={isPositive ? "border-emerald-500/20" : "border-destructive/20"}>
       <CardContent className="p-4 space-y-3">
-        {/* Label + edit */}
-        <div className="flex items-center justify-between">
-          <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">
-            {label}
-          </p>
-          <button
-            className="text-muted-foreground hover:text-foreground transition-colors"
-            onClick={() => {
-              const initial = isARS ? (config?.initial_ars ?? 0) : (config?.initial_usd ?? 0);
-              setInitialInput(initial.toString());
-              setEditInitial(e => !e);
-            }}
-          >
-            <Pencil className="h-3.5 w-3.5" />
-          </button>
-        </div>
+        <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">
+          {label} · total entre cuentas
+        </p>
 
         {/* Saldo principal */}
         <p className={`text-3xl font-bold ${isPositive ? "" : "text-destructive"}`}>
           {formatCurrency(balance, currency)}
         </p>
-
-        {/* Edit saldo inicial inline */}
-        {editInitial && (
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground shrink-0">Saldo inicial</span>
-            <Input
-              type="text"
-              value={initialInput}
-              onChange={e => setInitialInput(e.target.value)}
-              className="h-7 text-xs flex-1"
-              inputMode="decimal"
-              autoFocus
-            />
-            <button onClick={handleSaveInitial} disabled={saving} className="text-primary hover:text-primary/80">
-              <Check className="h-4 w-4" />
-            </button>
-            <button onClick={() => setEditInitial(false)} className="text-muted-foreground hover:text-foreground">
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        )}
 
         {/* TC pendiente */}
         {hasPending && (
@@ -244,9 +133,10 @@ function SaldoCard({
 // ─── FxHistory ────────────────────────────────────────────────────────────────
 
 function FxHistory({
-  transactions, onDelete,
+  transactions, accounts, onDelete,
 }: {
   transactions: FxTransaction[];
+  accounts: Account[];
   onDelete: (id: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -270,41 +160,50 @@ function FxHistory({
 
       {expanded && (
         <CardContent className="pt-0 space-y-0 rounded-lg border overflow-hidden">
-          {transactions.map((tx, i) => (
-            <div key={tx.id}>
-              <div className="flex items-center gap-3 px-3 py-2.5">
-                <div className="flex-1 min-w-0 text-xs space-y-0.5">
-                  <div className="flex items-center gap-2">
-                    <span className="text-muted-foreground">{formatDate(tx.date)}</span>
-                    <span className="text-muted-foreground">·</span>
-                    <span className="text-muted-foreground">
-                      ${tx.exchange_rate.toLocaleString("es-AR")}/USD
-                    </span>
+          {transactions.map((tx, i) => {
+            const account = accounts.find(a => a.id === tx.account_id);
+            return (
+              <div key={tx.id}>
+                <div className="flex items-center gap-3 px-3 py-2.5">
+                  <div className="flex-1 min-w-0 text-xs space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-muted-foreground">{formatDate(tx.date)}</span>
+                      <span className="text-muted-foreground">·</span>
+                      <span className="text-muted-foreground">
+                        ${tx.exchange_rate.toLocaleString("es-AR")}/USD
+                      </span>
+                      {account && (
+                        <>
+                          <span className="text-muted-foreground">·</span>
+                          <span className="text-muted-foreground">{account.name}</span>
+                        </>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 font-medium">
+                      <span className="text-destructive">
+                        − {formatCurrency(tx.ars_amount, "ARS")}
+                      </span>
+                      <span className="text-muted-foreground">→</span>
+                      <span className="text-emerald-400">
+                        + {formatCurrency(tx.usd_amount, "USD")}
+                      </span>
+                    </div>
+                    {tx.notes && (
+                      <p className="text-muted-foreground/70 truncate">{tx.notes}</p>
+                    )}
                   </div>
-                  <div className="flex items-center gap-2 font-medium">
-                    <span className="text-destructive">
-                      − {formatCurrency(tx.ars_amount, "ARS")}
-                    </span>
-                    <span className="text-muted-foreground">→</span>
-                    <span className="text-emerald-400">
-                      + {formatCurrency(tx.usd_amount, "USD")}
-                    </span>
-                  </div>
-                  {tx.notes && (
-                    <p className="text-muted-foreground/70 truncate">{tx.notes}</p>
-                  )}
+                  <Button
+                    variant="ghost" size="icon"
+                    className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
+                    onClick={() => onDelete(tx.id)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
                 </div>
-                <Button
-                  variant="ghost" size="icon"
-                  className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
-                  onClick={() => onDelete(tx.id)}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
+                {i < transactions.length - 1 && <Separator />}
               </div>
-              {i < transactions.length - 1 && <Separator />}
-            </div>
-          ))}
+            );
+          })}
         </CardContent>
       )}
     </Card>
@@ -314,8 +213,9 @@ function FxHistory({
 // ─── FxForm ───────────────────────────────────────────────────────────────────
 
 function FxForm({
-  onSaved, onCancel,
+  accounts, onSaved, onCancel,
 }: {
+  accounts: Account[];
   onSaved: (tx: Omit<FxTransaction, "id" | "created_at">) => Promise<void>;
   onCancel: () => void;
 }) {
@@ -324,6 +224,7 @@ function FxForm({
   const [exchangeRate, setExchangeRate] = useState("");
   const [date,         setDate]         = useState(today);
   const [notes,        setNotes]        = useState("");
+  const [accountId,    setAccountId]    = useState(accounts[0]?.id ?? "");
 
   // USD calculados automáticamente
   const ars  = parseAmount(arsAmount);
@@ -341,6 +242,7 @@ function FxForm({
         exchange_rate: rate,
         date,
         notes: notes || null,
+        account_id: accountId || null,
       });
     } finally {
       setSaving(false);
@@ -374,6 +276,21 @@ function FxForm({
           required
         />
       </div>
+
+      {/* Cuenta */}
+      {accounts.length > 0 && (
+        <div>
+          <Label className="text-xs mb-1.5 block">Cuenta</Label>
+          <Select value={accountId} onValueChange={setAccountId}>
+            <SelectTrigger><SelectValue placeholder="Elegí una cuenta" /></SelectTrigger>
+            <SelectContent>
+              {accounts.map(a => (
+                <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
 
       {/* Preview USD */}
       {usd > 0 && (

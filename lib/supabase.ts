@@ -2,7 +2,7 @@ import { createBrowserClient } from "@supabase/ssr";
 import type {
   CreditCard, CreditCardMonthlyConfig, Expense,
   Income, Investment, Dividend, BillingPayment,
-  SavingsConfig, FxTransaction, Account, ExpenseCustomCategory,
+  SavingsConfig, FxTransaction, Account, ExpenseCustomCategory, AccountTransfer,
 } from "@/types";
 
 // Cliente browser — usa cookies para que el middleware pueda leer la sesión
@@ -289,6 +289,30 @@ export async function addFxTransaction(
 
 export async function deleteFxTransaction(id: string): Promise<void> {
   const { error } = await supabase.from("fx_transactions").delete().eq("id", id);
+  if (error) throw error;
+}
+
+// ─── Account Transfers ────────────────────────────────────────────────────────
+
+export async function getTransfers(): Promise<AccountTransfer[]> {
+  const { data, error } = await supabase
+    .from("account_transfers")
+    .select("*")
+    .order("date", { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function addTransfer(
+  tx: Omit<AccountTransfer, "id" | "created_at">
+): Promise<void> {
+  const user_id = await uid();
+  const { error } = await supabase.from("account_transfers").insert({ ...tx, user_id });
+  if (error) throw error;
+}
+
+export async function deleteTransfer(id: string): Promise<void> {
+  const { error } = await supabase.from("account_transfers").delete().eq("id", id);
   if (error) throw error;
 }
 
