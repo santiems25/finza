@@ -535,7 +535,7 @@ function ExpenseDonutChart({
       </div>
 
       {/* Leyenda */}
-      <div className="w-24 shrink-0 space-y-1.5 ml-auto mr-2">
+      <div className="w-36 shrink-0 space-y-1.5 ml-auto">
         {data.map(slice => {
           const isHovered  = hovered === slice.label;
           const isSelected = selectedLabel === slice.label;
