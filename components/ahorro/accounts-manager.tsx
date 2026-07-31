@@ -84,7 +84,7 @@ export function AccountsManager({ accounts, data, onUpsert, onDelete, onAddTrans
         accounts.map(account => {
           const bal = balanceOf(account);
           return (
-            <Card key={account.id} className="border-border/50">
+            <Card key={account.id} className="rounded-2xl border-border/50 shadow-none">
               <CardContent className="p-3 flex items-center gap-3">
                 <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary shrink-0">
                   {ACCOUNT_TYPE_ICONS[account.account_type]}
@@ -282,7 +282,7 @@ function TransferHistory({
   const nameOf = (id: string) => accounts.find(a => a.id === id)?.name ?? "?";
 
   return (
-    <Card className="border-border/50">
+    <Card className="rounded-2xl border-border/50 shadow-none">
       <button
         className="w-full text-left px-3 py-2.5 flex items-center justify-between"
         onClick={() => setExpanded(e => !e)}

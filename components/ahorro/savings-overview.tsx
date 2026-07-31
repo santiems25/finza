@@ -96,14 +96,17 @@ function SaldoCard({
   const projected  = balance - pendingTC;
 
   return (
-    <Card className={isPositive ? "border-emerald-500/20" : "border-destructive/20"}>
-      <CardContent className="p-4 space-y-3">
-        <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">
+    <Card className={`rounded-2xl shadow-none ${isPositive ? "border-emerald-500/20" : "border-destructive/20"}`}>
+      <CardContent className="p-5 space-y-3">
+        <p className="text-[11px] text-muted-foreground uppercase tracking-wider font-medium">
           {label} · total entre cuentas
         </p>
 
         {/* Saldo principal */}
-        <p className={`text-3xl font-bold ${isPositive ? "" : "text-destructive"}`}>
+        <p
+          className={`text-[2.25rem] leading-tight font-bold tracking-tight ${isPositive ? "" : "text-destructive"}`}
+          style={{ fontFamily: "ui-rounded, 'SF Pro Rounded', system-ui, sans-serif" }}
+        >
           {formatCurrency(balance, currency)}
         </p>
 
@@ -142,7 +145,7 @@ function FxHistory({
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <Card>
+    <Card className="rounded-2xl border-border/50 shadow-none">
       <button className="w-full text-left" onClick={() => setExpanded(e => !e)}>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
