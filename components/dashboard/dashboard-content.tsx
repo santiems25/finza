@@ -2,11 +2,10 @@
 
 import { useEffect, useState, useCallback } from "react";
 import {
-  ChevronLeft, ChevronRight, CreditCard, CheckCircle2,
-  Clock, Wallet, TrendingDown, TrendingUp, RotateCcw,
-  DollarSign, Plus, Trash2,
+  ChevronLeft, ChevronRight, ChevronDown, ChevronUp, CreditCard, CheckCircle2,
+  Clock, Wallet, Plus, Trash2, TrendingUp, TrendingDown, Calendar,
 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -14,13 +13,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import {
   getCreditCards, getExpenses, getIncomes, deleteIncome,
   getBillingPayments, markBillingAsPaid, unmarkBillingAsPaid,
-  getCustomCategories,
+  getCustomCategories, getMonthlyConfigs, getAccounts,
 } from "@/lib/supabase";
-import { formatCurrency, getMonthName, getCategoryMeta } from "@/lib/utils";
+import { formatCurrency, getMonthName, getCategoryMeta, getDueDate } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { IncomeForm } from "./income-form";
+import { ExpenseForm } from "@/components/gastos/expense-form";
 import type {
-  CreditCard as CreditCardType, Expense, Income, BillingPayment, ExpenseCustomCategory,
+  CreditCard as CreditCardType, CreditCardMonthlyConfig, Expense, Income, BillingPayment,
+  ExpenseCustomCategory, Account,
 } from "@/types";
 import { INCOME_SOURCE_ICONS, INCOME_SOURCE_LABELS } from "@/types";
 
@@ -38,30 +39,42 @@ interface PeriodSummary {
   cards: CardBillingEntry[];
 }
 
+// Paleta tierra/pastel validada (ver skill dataviz) — orden fijo, no cíclico
+const DONUT_COLORS = ["#b5502e", "#c9a92e", "#2d7a3a", "#8a4a9e", "#a83d3d"];
+const DONUT_OTHER_COLOR = "#9c9a92";
+
 export function DashboardContent() {
   const now = new Date();
   const [viewMonth, setViewMonth] = useState(now.getMonth());
   const [viewYear,  setViewYear]  = useState(now.getFullYear());
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const [incomeOpen, setIncomeOpen] = useState(false);
+  const [movementOpen, setMovementOpen] = useState(false);
+  const [movementType, setMovementType] = useState<"gasto" | "ingreso">("gasto");
+  const [summaryCurrency, setSummaryCurrency] = useState<"ARS" | "USD">("ARS");
+  const [billingCollapsedOpen, setBillingCollapsedOpen] = useState(false);
+  const [collapsedCards, setCollapsedCards] = useState<Set<string>>(new Set());
 
   const [expenses,        setExpenses]        = useState<Expense[]>([]);
   const [incomes,         setIncomes]         = useState<Income[]>([]);
   const [cards,           setCards]           = useState<CreditCardType[]>([]);
   const [billingPayments, setBillingPayments] = useState<BillingPayment[]>([]);
   const [customCategories, setCustomCategories] = useState<ExpenseCustomCategory[]>([]);
+  const [monthlyConfigs,  setMonthlyConfigs]  = useState<CreditCardMonthlyConfig[]>([]);
+  const [accounts,        setAccounts]        = useState<Account[]>([]);
   const [loading,         setLoading]         = useState(true);
   const { toast } = useToast();
 
   const load = useCallback(async () => {
-    const [e, i, c, bp, cats] = await Promise.all([
-      getExpenses(), getIncomes(), getCreditCards(), getBillingPayments(), getCustomCategories(),
+    const [e, i, c, bp, cats, mc, acc] = await Promise.all([
+      getExpenses(), getIncomes(), getCreditCards(), getBillingPayments(),
+      getCustomCategories(), getMonthlyConfigs(), getAccounts(),
     ]);
     setExpenses(e);
     setIncomes(i);
     setCards(c);
     setBillingPayments(bp);
     setCustomCategories(cats);
+    setMonthlyConfigs(mc);
+    setAccounts(acc);
     setLoading(false);
   }, []);
 
@@ -78,40 +91,35 @@ export function DashboardContent() {
   };
   const isCurrentMonth = viewMonth === now.getMonth() && viewYear === now.getFullYear();
 
-  // ── Gastos del mes ──────────────────────────────────────────────────────────
+  // ── Gastos / ingresos del mes ────────────────────────────────────────────────
   const monthExpenses = expenses.filter(e => {
     const d = new Date(e.date + "T00:00:00");
     return d.getMonth() === viewMonth && d.getFullYear() === viewYear;
   });
-  const filtered = selectedCategory
-    ? monthExpenses.filter(e => e.category === selectedCategory)
-    : monthExpenses;
-
-  const totalExpARS = monthExpenses.filter(e => e.currency === "ARS").reduce((s, e) => s + e.amount, 0);
-  const totalExpUSD = monthExpenses.filter(e => e.currency === "USD").reduce((s, e) => s + e.amount, 0);
-
-  // ── Ingresos del mes ────────────────────────────────────────────────────────
   const monthIncomes = incomes.filter(i => {
     const d = new Date(i.date + "T00:00:00");
     return d.getMonth() === viewMonth && d.getFullYear() === viewYear;
   });
-  const totalIncARS = monthIncomes.filter(i => i.currency === "ARS").reduce((s, i) => s + i.amount, 0);
-  const totalIncUSD = monthIncomes.filter(i => i.currency === "USD").reduce((s, i) => s + i.amount, 0);
 
-  // ── Balance ─────────────────────────────────────────────────────────────────
-  const balanceARS = totalIncARS - totalExpARS;
-  const balanceUSD = totalIncUSD - totalExpUSD;
-  const hasUSD     = totalExpUSD > 0 || totalIncUSD > 0;
+  const totalExpARS = monthExpenses.filter(e => e.currency === "ARS").reduce((s, e) => s + e.amount, 0);
+  const totalExpUSD = monthExpenses.filter(e => e.currency === "USD").reduce((s, e) => s + e.amount, 0);
+  const hasUSD = totalExpUSD > 0 || monthIncomes.some(i => i.currency === "USD");
 
-  // ── Categorías ──────────────────────────────────────────────────────────────
-  const categoryTotalsARS = getCategoryTotals(filtered.filter(e => e.currency === "ARS"));
-  const categoryTotalsUSD = getCategoryTotals(filtered.filter(e => e.currency === "USD"));
+  const activeCurrency = hasUSD ? summaryCurrency : "ARS";
+  const totalExp = activeCurrency === "ARS" ? totalExpARS : totalExpUSD;
+
+  // ── Categorías (solo moneda activa, top 4 + Otras) ──────────────────────────
+  const categoryTotals = getCategoryTotals(monthExpenses.filter(e => e.currency === activeCurrency));
+  const donutData = topCategoriesWithOther(categoryTotals, customCategories);
 
   // ── TC ──────────────────────────────────────────────────────────────────────
   const billingSummaries = buildBillingSummaries(expenses, cards, billingPayments);
   const relevantBillings = billingSummaries.filter(
     s => s.billingMonth === viewMonth && s.billingYear === viewYear
   );
+  const allEntries = relevantBillings.flatMap(s => s.cards.map(entry => ({ entry, summary: s })));
+  const pendingEntries = allEntries.filter(x => !x.entry.isPaid);
+  const paidEntries    = allEntries.filter(x => x.entry.isPaid);
 
   const handleTogglePaid = async (entry: CardBillingEntry, summary: PeriodSummary) => {
     try {
@@ -128,402 +136,480 @@ export function DashboardContent() {
     }
   };
 
+  const toggleCardCollapsed = (key: string) => {
+    setCollapsedCards(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  };
+
+  // ── Movimientos unificados (gastos + ingresos), orden cronológico desc ──────
+  type Movement =
+    | { kind: "expense"; id: string; date: string; data: Expense }
+    | { kind: "income";  id: string; date: string; data: Income };
+
+  const movements: Movement[] = [
+    ...monthExpenses.map(e => ({ kind: "expense" as const, id: e.id, date: e.date, data: e })),
+    ...monthIncomes.map(i => ({ kind: "income" as const, id: i.id, date: i.date, data: i })),
+  ].sort((a, b) => b.date.localeCompare(a.date));
+
   const handleDeleteIncome = async (id: string) => {
     await deleteIncome(id);
     toast({ title: "Ingreso eliminado" });
     load();
   };
 
-  // Fecha inicial para el form de ingreso (primer día del mes visible)
-  const defaultIncomeDate = `${viewYear}-${String(viewMonth + 1).padStart(2, "0")}-01`;
+  // Fecha inicial para los forms (primer día del mes visible)
+  const defaultDate = `${viewYear}-${String(viewMonth + 1).padStart(2, "0")}-01`;
 
   if (loading) return null;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
 
-      {/* ── Selector de mes ── */}
+      {/* ── Header: mes + botón agregar ── */}
       <div className="flex items-center justify-between">
         <Button variant="ghost" size="icon" onClick={prevMonth} className="h-8 w-8">
           <ChevronLeft className="h-4 w-4" />
         </Button>
         <div className="text-center">
-          <p className="font-semibold text-base">{getMonthName(viewMonth)} {viewYear}</p>
+          <p className="font-semibold text-base tracking-tight">{getMonthName(viewMonth)} {viewYear}</p>
           {isCurrentMonth && (
             <span className="text-[10px] text-primary font-medium">Mes actual</span>
           )}
         </div>
-        <Button variant="ghost" size="icon" onClick={nextMonth} className="h-8 w-8">
-          <ChevronRight className="h-4 w-4" />
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button variant="ghost" size="icon" onClick={nextMonth} className="h-8 w-8">
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+          <Button
+            size="icon"
+            className="h-8 w-8 rounded-full bg-[#2d5016] hover:bg-[#3a6b1d] border-0 -mr-1"
+            onClick={() => setMovementOpen(true)}
+          >
+            <Plus className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
 
-      {/* ── Balance del mes — ARS ── */}
-      <BalanceCard
-        currency="ARS"
-        income={totalIncARS}
-        expenses={totalExpARS}
-        balance={balanceARS}
-        onAddIncome={() => setIncomeOpen(true)}
+      {/* ── Dashboard resumen ── */}
+      <SummaryCard
+        total={totalExp}
+        currency={activeCurrency}
+        hasUSD={hasUSD}
+        onCurrencyChange={setSummaryCurrency}
+        donutData={donutData}
       />
 
-      {/* ── Balance del mes — USD (solo si hay movimiento) ── */}
-      {hasUSD && (
-        <BalanceCard
-          currency="USD"
-          income={totalIncUSD}
-          expenses={totalExpUSD}
-          balance={balanceUSD}
-          onAddIncome={() => setIncomeOpen(true)}
-        />
-      )}
-
-      {/* ── Ingresos del mes ── */}
-      {monthIncomes.length > 0 && (
-        <Card>
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-semibold">Ingresos</CardTitle>
-              <Button
-                variant="ghost" size="sm"
-                className="h-6 text-xs gap-1 text-primary"
-                onClick={() => setIncomeOpen(true)}
-              >
-                <Plus className="h-3 w-3" /> Agregar
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent className="p-0">
-            {monthIncomes.map((inc, i) => (
-              <div key={inc.id}>
-                <div className="flex items-center gap-3 px-5 py-3">
-                  <span className="text-lg shrink-0">{INCOME_SOURCE_ICONS[inc.source]}</span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{inc.description}</p>
-                    <p className="text-xs text-muted-foreground">{INCOME_SOURCE_LABELS[inc.source]}</p>
-                  </div>
-                  <span className={`text-sm font-semibold ${inc.currency === "USD" ? "text-emerald-400" : "text-green-400"}`}>
-                    +{formatCurrency(inc.amount, inc.currency)}
-                  </span>
-                  <Button
-                    variant="ghost" size="icon"
-                    className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
-                    onClick={() => handleDeleteIncome(inc.id)}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-                {i < monthIncomes.length - 1 && <Separator />}
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* ── Breakdown categorías ARS ── */}
-      {categoryTotalsARS.length > 0 && (
-        <CategoryBreakdown
-          title="Gastos por categoría — ARS"
-          totals={categoryTotalsARS}
-          currency="ARS"
-          selectedCategory={selectedCategory}
-          customCategories={customCategories}
-          onSelect={setSelectedCategory}
-        />
-      )}
-
-      {/* ── Breakdown categorías USD ── */}
-      {categoryTotalsUSD.length > 0 && (
-        <CategoryBreakdown
-          title="Gastos por categoría — USD"
-          totals={categoryTotalsUSD}
-          currency="USD"
-          selectedCategory={selectedCategory}
-          customCategories={customCategories}
-          onSelect={setSelectedCategory}
-        />
-      )}
-
       {/* ── Resúmenes TC ── */}
-      {relevantBillings.length > 0 && (
-        <div className="space-y-2">
+      {allEntries.length > 0 && (
+        <div className="space-y-2.5">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-            Resúmenes TC — {getMonthName(viewMonth)}
+            Resúmenes TC
           </p>
-          {relevantBillings.map(summary =>
-            summary.cards.map(entry => (
-              <BillingCard
-                key={`${entry.card.id}-${summary.billingMonth}-${summary.billingYear}`}
-                entry={entry}
-                summary={summary}
-                onTogglePaid={() => handleTogglePaid(entry, summary)}
-              />
-            ))
+
+          {pendingEntries.length > 0 ? (
+            <>
+              {pendingEntries.map(({ entry, summary }) => {
+                const key = `${entry.card.id}-${summary.billingYear}-${summary.billingMonth}`;
+                return (
+                  <BillingCard
+                    key={key}
+                    entry={entry}
+                    summary={summary}
+                    monthlyConfigs={monthlyConfigs}
+                    customCategories={customCategories}
+                    expanded={!collapsedCards.has(key)}
+                    onToggleExpanded={() => toggleCardCollapsed(key)}
+                    onTogglePaid={() => handleTogglePaid(entry, summary)}
+                  />
+                );
+              })}
+              {paidEntries.map(({ entry, summary }) => {
+                const key = `${entry.card.id}-${summary.billingYear}-${summary.billingMonth}`;
+                return (
+                  <BillingCard
+                    key={key}
+                    entry={entry}
+                    summary={summary}
+                    monthlyConfigs={monthlyConfigs}
+                    customCategories={customCategories}
+                    expanded={collapsedCards.has(key)}
+                    onToggleExpanded={() => toggleCardCollapsed(key)}
+                    onTogglePaid={() => handleTogglePaid(entry, summary)}
+                  />
+                );
+              })}
+            </>
+          ) : (
+            <Card className="border-emerald-500/20">
+              <button
+                className="w-full text-left px-4 py-3 flex items-center justify-between"
+                onClick={() => setBillingCollapsedOpen(o => !o)}
+              >
+                <span className="flex items-center gap-2 text-sm font-medium">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                  Todos los resúmenes están pagados
+                </span>
+                {billingCollapsedOpen
+                  ? <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                  : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+              </button>
+              {billingCollapsedOpen && (
+                <CardContent className="pt-0 space-y-2.5">
+                  {allEntries.map(({ entry, summary }) => {
+                    const key = `${entry.card.id}-${summary.billingYear}-${summary.billingMonth}`;
+                    return (
+                      <BillingCard
+                        key={key}
+                        entry={entry}
+                        summary={summary}
+                        monthlyConfigs={monthlyConfigs}
+                        customCategories={customCategories}
+                        expanded={collapsedCards.has(key)}
+                        onToggleExpanded={() => toggleCardCollapsed(key)}
+                        onTogglePaid={() => handleTogglePaid(entry, summary)}
+                      />
+                    );
+                  })}
+                </CardContent>
+              )}
+            </Card>
           )}
         </div>
       )}
 
-      {/* ── Últimos gastos ── */}
-      {filtered.length > 0 ? (
-        <Card>
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-semibold">
-                {selectedCategory
-                  ? `${getCategoryMeta(selectedCategory, customCategories).icon} ${getCategoryMeta(selectedCategory, customCategories).label}`
-                  : "Últimos gastos"}
-              </CardTitle>
-              {selectedCategory && (
-                <Button
-                  variant="ghost" size="sm"
-                  className="h-6 text-xs gap-1 text-muted-foreground"
-                  onClick={() => setSelectedCategory(null)}
-                >
-                  <RotateCcw className="h-3 w-3" /> Limpiar
-                </Button>
-              )}
-            </div>
-          </CardHeader>
-          <CardContent className="p-0">
-            {filtered.slice(0, 8).map((expense, i) => {
-              const card = cards.find(c => c.id === expense.credit_card_id);
-              const { icon: catIcon, label: catLabel, bg: catBg, text: catText } =
-                getCategoryMeta(expense.category, customCategories);
-              return (
-                <div key={expense.id}>
-                  <div className="flex items-center gap-3 px-5 py-3">
-                    <span className="text-lg leading-none shrink-0">{catIcon}</span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{expense.description}</p>
-                      <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${catBg} ${catText}`}>
-                          {catLabel}
-                        </span>
-                        {expense.total_installments > 1 && (
-                          <span className="text-[10px] text-muted-foreground">
-                            {expense.installment_number}/{expense.total_installments}
-                          </span>
-                        )}
-                        {card && <span className="text-[10px] text-muted-foreground">{card.name}</span>}
-                      </div>
-                    </div>
-                    <span className={`text-sm font-semibold shrink-0 ${expense.currency === "USD" ? "text-emerald-400" : ""}`}>
-                      {formatCurrency(expense.amount, expense.currency)}
-                    </span>
-                  </div>
-                  {i < Math.min(filtered.length, 8) - 1 && <Separator />}
-                </div>
-              );
-            })}
-            {filtered.length > 8 && (
-              <p className="text-xs text-center text-muted-foreground py-3">
-                +{filtered.length - 8} más en Gastos
-              </p>
-            )}
-          </CardContent>
-        </Card>
-      ) : (
-        !relevantBillings.length && monthIncomes.length === 0 && (
+      {/* ── Movimientos ── */}
+      <div className="space-y-2.5">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+          Movimientos
+        </p>
+        {movements.length === 0 ? (
           <div className="text-center py-10 text-muted-foreground">
             <Wallet className="h-10 w-10 mx-auto mb-3 opacity-20" />
             <p className="text-sm">Sin movimientos en {getMonthName(viewMonth)}</p>
           </div>
-        )
-      )}
+        ) : (
+          <Card className="rounded-2xl border-border/50 shadow-none">
+            <CardContent className="p-0">
+              {movements.slice(0, 12).map((m, i) => (
+                <div key={`${m.kind}-${m.id}`}>
+                  {m.kind === "expense"
+                    ? <ExpenseRow expense={m.data} cards={cards} customCategories={customCategories} />
+                    : <IncomeRow income={m.data} onDelete={handleDeleteIncome} />}
+                  {i < Math.min(movements.length, 12) - 1 && <Separator />}
+                </div>
+              ))}
+              {movements.length > 12 && (
+                <p className="text-xs text-center text-muted-foreground py-3">
+                  +{movements.length - 12} más
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        )}
+      </div>
 
-      {/* ── Dialog ingreso ── */}
-      <Dialog open={incomeOpen} onOpenChange={setIncomeOpen}>
-        <DialogContent className="max-w-sm mx-auto">
+      {/* ── Dialog nuevo movimiento (gasto o ingreso) ── */}
+      <Dialog open={movementOpen} onOpenChange={setMovementOpen}>
+        <DialogContent className="max-w-sm mx-auto max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Registrar ingreso</DialogTitle>
+            <DialogTitle>Nuevo movimiento</DialogTitle>
           </DialogHeader>
-          <IncomeForm
-            defaultDate={defaultIncomeDate}
-            onSaved={() => { setIncomeOpen(false); load(); toast({ title: "✅ Ingreso registrado" }); }}
-          />
+
+          <div className="flex rounded-lg bg-muted p-1 gap-1 mb-1">
+            <button
+              onClick={() => setMovementType("gasto")}
+              className={`flex-1 text-xs font-medium py-1.5 rounded-md transition-colors ${
+                movementType === "gasto" ? "bg-background text-foreground shadow" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Gasto
+            </button>
+            <button
+              onClick={() => setMovementType("ingreso")}
+              className={`flex-1 text-xs font-medium py-1.5 rounded-md transition-colors ${
+                movementType === "ingreso" ? "bg-background text-foreground shadow" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Ingreso
+            </button>
+          </div>
+
+          {movementType === "gasto" ? (
+            <ExpenseForm
+              cards={cards}
+              monthlyConfigs={monthlyConfigs}
+              accounts={accounts}
+              customCategories={customCategories}
+              onSaved={() => { setMovementOpen(false); load(); toast({ title: "✅ Gasto guardado" }); }}
+            />
+          ) : (
+            <IncomeForm
+              defaultDate={defaultDate}
+              onSaved={() => { setMovementOpen(false); load(); toast({ title: "✅ Ingreso registrado" }); }}
+            />
+          )}
         </DialogContent>
       </Dialog>
     </div>
   );
 }
 
-// ─── BalanceCard ──────────────────────────────────────────────────────────────
+// ─── SummaryCard ──────────────────────────────────────────────────────────────
 
-function BalanceCard({
-  currency, income, expenses, balance, onAddIncome,
+function SummaryCard({
+  total, currency, hasUSD, onCurrencyChange, donutData,
 }: {
+  total: number;
   currency: "ARS" | "USD";
-  income: number;
-  expenses: number;
-  balance: number;
-  onAddIncome: () => void;
+  hasUSD: boolean;
+  onCurrencyChange: (c: "ARS" | "USD") => void;
+  donutData: { label: string; icon: string; value: number; percent: number; color: string }[];
 }) {
-  const isPositive = balance >= 0;
-  const hasIncome  = income > 0;
+  const hasData = donutData.length > 0;
 
   return (
-    <Card className={balance < 0 ? "border-destructive/30" : isPositive && hasIncome ? "border-emerald-500/20" : ""}>
-      <CardContent className="p-4">
-        {/* Label moneda */}
-        <div className="flex items-center justify-between mb-3">
-          <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">
-            {currency === "ARS" ? "Pesos (ARS)" : "Dólares (USD)"}
+    <Card className="rounded-2xl border-border/50 shadow-none">
+      <CardContent className="p-5">
+        <div className="flex items-start justify-between mb-1">
+          <p className="text-[11px] text-muted-foreground uppercase tracking-wider font-medium">
+            Gastado en el mes
           </p>
-          {currency === "ARS" && (
-            <Button
-              variant="ghost" size="sm"
-              className="h-6 text-xs gap-1 text-primary -mr-1"
-              onClick={onAddIncome}
-            >
-              <Plus className="h-3 w-3" /> Ingreso
-            </Button>
+          {hasUSD && (
+            <div className="flex rounded-full bg-muted p-0.5 gap-0.5">
+              {(["ARS", "USD"] as const).map(c => (
+                <button
+                  key={c}
+                  onClick={() => onCurrencyChange(c)}
+                  className={`text-[10px] font-semibold px-2 py-0.5 rounded-full transition-colors ${
+                    currency === c ? "bg-background text-foreground shadow" : "text-muted-foreground"
+                  }`}
+                >
+                  {c}
+                </button>
+              ))}
+            </div>
           )}
         </div>
 
-        <div className="grid grid-cols-3 gap-3">
-          {/* Ingreso */}
-          <div>
-            <p className="text-[10px] text-muted-foreground flex items-center gap-1 mb-0.5">
-              <TrendingUp className="h-3 w-3" /> Ingreso
-            </p>
-            {hasIncome ? (
-              <p className="text-base font-bold text-green-400">
-                {formatCurrency(income, currency)}
-              </p>
-            ) : (
-              <button
-                onClick={onAddIncome}
-                className="text-xs text-muted-foreground/60 hover:text-primary transition-colors text-left"
-              >
-                + Agregar
-              </button>
-            )}
-          </div>
+        {/* Monto grande protagonista */}
+        <p className="text-[2.25rem] leading-tight font-bold tracking-tight mb-4" style={{ fontFamily: "ui-rounded, 'SF Pro Rounded', system-ui, sans-serif" }}>
+          {formatCurrency(total, currency)}
+        </p>
 
-          {/* Gastos */}
-          <div>
-            <p className="text-[10px] text-muted-foreground flex items-center gap-1 mb-0.5">
-              <TrendingDown className="h-3 w-3" /> Gastos
-            </p>
-            <p className="text-base font-bold">{formatCurrency(expenses, currency)}</p>
+        {hasData ? (
+          <div className="flex items-center gap-5">
+            <DonutChart data={donutData} />
+            <div className="flex-1 min-w-0 space-y-1.5">
+              {donutData.map(d => (
+                <div key={d.label} className="flex items-center gap-2 text-xs">
+                  <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: d.color }} />
+                  <span className="truncate flex-1">{d.icon} {d.label}</span>
+                  <span className="text-muted-foreground shrink-0">{d.percent.toFixed(0)}%</span>
+                </div>
+              ))}
+            </div>
           </div>
-
-          {/* Saldo */}
-          <div>
-            <p className="text-[10px] text-muted-foreground flex items-center gap-1 mb-0.5">
-              <Wallet className="h-3 w-3" /> Saldo
-            </p>
-            {hasIncome ? (
-              <p className={`text-base font-bold ${isPositive ? "text-green-400" : "text-destructive"}`}>
-                {isPositive ? "+" : ""}{formatCurrency(balance, currency)}
-              </p>
-            ) : (
-              <p className="text-base font-bold text-muted-foreground/40">—</p>
-            )}
-          </div>
-        </div>
+        ) : (
+          <p className="text-xs text-muted-foreground py-2">Sin gastos categorizados este mes</p>
+        )}
       </CardContent>
     </Card>
   );
 }
 
-// ─── CategoryBreakdown ────────────────────────────────────────────────────────
+// ─── DonutChart ───────────────────────────────────────────────────────────────
 
-function CategoryBreakdown({
-  title, totals, currency, selectedCategory, customCategories, onSelect,
+function DonutChart({ data }: { data: { value: number; color: string }[] }) {
+  const size = 88, stroke = 14, r = (size - stroke) / 2, c = 2 * Math.PI * r;
+  const total = data.reduce((s, d) => s + d.value, 0) || 1;
+
+  let offset = 0;
+  const segments = data.map(d => {
+    const frac = d.value / total;
+    const len  = frac * c;
+    const seg  = { ...d, dasharray: `${len} ${c - len}`, dashoffset: -offset };
+    offset += len;
+    return seg;
+  });
+
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="shrink-0 -rotate-90">
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--muted)" strokeWidth={stroke} opacity={0.3} />
+      {segments.map((s, i) => (
+        <circle
+          key={i}
+          cx={size / 2} cy={size / 2} r={r}
+          fill="none"
+          stroke={s.color}
+          strokeWidth={stroke}
+          strokeDasharray={s.dasharray}
+          strokeDashoffset={s.dashoffset}
+          strokeLinecap="butt"
+        />
+      ))}
+    </svg>
+  );
+}
+
+// ─── ExpenseRow / IncomeRow ───────────────────────────────────────────────────
+
+function ExpenseRow({
+  expense, cards, customCategories,
 }: {
-  title: string;
-  totals: { category: string; total: number; percent: number }[];
-  currency: "ARS" | "USD";
-  selectedCategory: string | null;
+  expense: Expense;
+  cards: CreditCardType[];
   customCategories: ExpenseCustomCategory[];
-  onSelect: (cat: string | null) => void;
+}) {
+  const card = cards.find(c => c.id === expense.credit_card_id);
+  const { icon, label, bg, text } = getCategoryMeta(expense.category, customCategories);
+  return (
+    <div className="flex items-center gap-3 px-4 py-3">
+      <div className={`h-9 w-9 rounded-xl flex items-center justify-center shrink-0 text-base ${bg}`}>
+        {icon}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium truncate">{expense.description}</p>
+        <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+          <span className={`text-[10px] font-medium ${text}`}>{label}</span>
+          {expense.total_installments > 1 && (
+            <span className="text-[10px] text-muted-foreground">
+              · {expense.installment_number}/{expense.total_installments}
+            </span>
+          )}
+          {card && <span className="text-[10px] text-muted-foreground">· {card.name}</span>}
+        </div>
+      </div>
+      <span className={`text-sm font-semibold shrink-0 ${expense.currency === "USD" ? "text-emerald-500" : ""}`}>
+        −{formatCurrency(expense.amount, expense.currency)}
+      </span>
+    </div>
+  );
+}
+
+function IncomeRow({
+  income, onDelete,
+}: {
+  income: Income;
+  onDelete: (id: string) => void;
 }) {
   return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-semibold">{title}</CardTitle>
-      </CardHeader>
-      <CardContent className="p-4 pt-0 space-y-2.5">
-        {totals.map(({ category, total, percent }) => {
-          const meta   = getCategoryMeta(category, customCategories);
-          const active = selectedCategory === category;
-          return (
-            <button
-              key={category}
-              onClick={() => onSelect(active ? null : category)}
-              className={`w-full text-left transition-opacity ${
-                selectedCategory && !active ? "opacity-40" : "opacity-100"
-              }`}
-            >
-              <div className="flex items-center justify-between mb-1">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-sm">{meta.icon}</span>
-                  <span className="text-xs font-medium">{meta.label}</span>
-                  {active && <Badge variant="outline" className="text-[10px] h-4 px-1">filtro</Badge>}
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground">{percent.toFixed(0)}%</span>
-                  <span className={`text-xs font-semibold ${currency === "USD" ? "text-emerald-400" : ""}`}>
-                    {formatCurrency(total, currency)}
-                  </span>
-                </div>
-              </div>
-              <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
-                <div className={`h-full rounded-full ${meta.bar}`} style={{ width: `${percent}%` }} />
-              </div>
-            </button>
-          );
-        })}
-      </CardContent>
-    </Card>
+    <div className="flex items-center gap-3 px-4 py-3">
+      <div className="h-9 w-9 rounded-xl flex items-center justify-center shrink-0 text-base bg-emerald-500/15">
+        {INCOME_SOURCE_ICONS[income.source]}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium truncate">{income.description}</p>
+        <span className="text-[10px] text-muted-foreground">{INCOME_SOURCE_LABELS[income.source]}</span>
+      </div>
+      <span className="text-sm font-semibold shrink-0 text-emerald-500">
+        +{formatCurrency(income.amount, income.currency)}
+      </span>
+      <Button
+        variant="ghost" size="icon"
+        className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0 -mr-1"
+        onClick={() => onDelete(income.id)}
+      >
+        <Trash2 className="h-3.5 w-3.5" />
+      </Button>
+    </div>
   );
 }
 
 // ─── BillingCard ──────────────────────────────────────────────────────────────
 
 function BillingCard({
-  entry, summary, onTogglePaid,
+  entry, summary, monthlyConfigs, customCategories, expanded, onToggleExpanded, onTogglePaid,
 }: {
   entry: CardBillingEntry;
   summary: PeriodSummary;
+  monthlyConfigs: CreditCardMonthlyConfig[];
+  customCategories: ExpenseCustomCategory[];
+  expanded: boolean;
+  onToggleExpanded: () => void;
   onTogglePaid: () => void;
 }) {
+  const dueDate = getDueDate(summary.billingMonth, summary.billingYear, entry.card, monthlyConfigs);
+  const days    = Math.round((dueDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+  const isOverdue = !entry.isPaid && days < 0;
+  const isDueSoon = !entry.isPaid && days >= 0 && days <= 5;
+
   return (
-    <Card className={entry.isPaid ? "opacity-60" : "border-primary/30"}>
+    <Card className={`rounded-2xl shadow-none ${
+      entry.isPaid ? "opacity-60 border-border/40" : isOverdue ? "border-destructive/40" : isDueSoon ? "border-amber-500/40" : "border-primary/25"
+    }`}>
       <CardContent className="p-4">
         <div className="flex items-start justify-between gap-3">
-          <div className="flex-1">
-            <div className="flex items-center gap-2 mb-1.5">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1.5 flex-wrap">
               <CreditCard className={`h-4 w-4 ${entry.isPaid ? "text-muted-foreground" : "text-primary"}`} />
               <span className="text-sm font-semibold">{entry.card.name}</span>
               {entry.isPaid ? (
                 <Badge variant="success" className="text-[10px] h-4 px-1.5 gap-1">
                   <CheckCircle2 className="h-2.5 w-2.5" /> Pagado
                 </Badge>
-              ) : (
+              ) : isOverdue ? (
+                <Badge variant="destructive" className="text-[10px] h-4 px-1.5">
+                  Vencido hace {Math.abs(days)}d
+                </Badge>
+              ) : isDueSoon ? (
                 <Badge variant="warning" className="text-[10px] h-4 px-1.5 gap-1">
-                  <Clock className="h-2.5 w-2.5" /> Pendiente
+                  <Clock className="h-2.5 w-2.5" /> Vence en {days}d
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="text-[10px] h-4 px-1.5 gap-1 text-muted-foreground">
+                  <Calendar className="h-2.5 w-2.5" />
+                  Vence {dueDate.getDate()} de {getMonthName(dueDate.getMonth())}
                 </Badge>
               )}
             </div>
             <div className="flex items-baseline gap-3">
               {entry.totalARS > 0 && <span className="text-lg font-bold">{formatCurrency(entry.totalARS, "ARS")}</span>}
-              {entry.totalUSD > 0 && <span className="text-sm font-semibold text-emerald-400">{formatCurrency(entry.totalUSD, "USD")}</span>}
+              {entry.totalUSD > 0 && <span className="text-sm font-semibold text-emerald-500">{formatCurrency(entry.totalUSD, "USD")}</span>}
+              <span className="text-xs text-muted-foreground">
+                · {entry.expenses.length} compra{entry.expenses.length !== 1 ? "s" : ""}
+              </span>
             </div>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Vence el {entry.card.due_day} de {getMonthName(summary.billingMonth)} · {entry.expenses.length} compra{entry.expenses.length !== 1 ? "s" : ""}
-            </p>
           </div>
           <Button
             size="sm"
             variant={entry.isPaid ? "outline" : "default"}
-            className="shrink-0 h-8 text-xs"
+            className={`shrink-0 h-8 text-xs ${!entry.isPaid ? "bg-[#2d5016] hover:bg-[#3a6b1d] border-0" : ""}`}
             onClick={onTogglePaid}
           >
-            {entry.isPaid ? "Desmarcar" : "✓ Pagado"}
+            {entry.isPaid ? "Desmarcar" : "✓ Pagar"}
           </Button>
         </div>
+
+        <button
+          onClick={onToggleExpanded}
+          className="flex items-center gap-1.5 text-xs text-muted-foreground mt-2.5 hover:text-foreground transition-colors"
+        >
+          {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+          {expanded ? "Ocultar gastos" : "Ver gastos"}
+        </button>
+
+        {expanded && (
+          <div className="mt-2 -mx-4 divide-y divide-border/40 border-t border-border/40">
+            {entry.expenses.map(expense => {
+              const meta = getCategoryMeta(expense.category, customCategories);
+              return (
+                <div key={expense.id} className="flex items-center gap-3 px-4 py-2.5">
+                  <span className="text-base shrink-0">{meta.icon}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium truncate">{expense.description}</p>
+                    <span className="text-[10px] text-muted-foreground">{meta.label}</span>
+                  </div>
+                  <span className="text-xs font-semibold shrink-0">
+                    {formatCurrency(expense.amount, expense.currency)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -538,6 +624,25 @@ function getCategoryTotals(expenses: Expense[]) {
   return Array.from(map.entries())
     .map(([category, t]) => ({ category, total: t, percent: total > 0 ? (t / total) * 100 : 0 }))
     .sort((a, b) => b.total - a.total);
+}
+
+function topCategoriesWithOther(
+  totals: { category: string; total: number; percent: number }[],
+  customCategories: ExpenseCustomCategory[],
+  max = 4
+) {
+  const top = totals.slice(0, max);
+  const rest = totals.slice(max);
+  const result = top.map((t, i) => {
+    const meta = getCategoryMeta(t.category, customCategories);
+    return { label: meta.label, icon: meta.icon, value: t.total, percent: t.percent, color: DONUT_COLORS[i] };
+  });
+  if (rest.length > 0) {
+    const restTotal = rest.reduce((s, t) => s + t.total, 0);
+    const restPercent = rest.reduce((s, t) => s + t.percent, 0);
+    result.push({ label: "Otras", icon: "•", value: restTotal, percent: restPercent, color: DONUT_OTHER_COLOR });
+  }
+  return result;
 }
 
 function buildBillingSummaries(
