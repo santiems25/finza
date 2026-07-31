@@ -56,7 +56,7 @@ export function DashboardContent() {
   const [summaryCurrency, setSummaryCurrency] = useState<"ARS" | "USD">("ARS");
   const [billingCollapsedOpen, setBillingCollapsedOpen] = useState(false);
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
-  const [movementFilter, setMovementFilter] = useState<string>("all");
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
 
   const [expenses,        setExpenses]        = useState<Expense[]>([]);
   const [incomes,         setIncomes]         = useState<Income[]>([]);
@@ -117,6 +117,12 @@ export function DashboardContent() {
   const categoryTotals = getCategoryTotals(monthExpenses.filter(e => e.currency === activeCurrency));
   const donutData = topCategoriesWithOther(categoryTotals, customCategories);
 
+  // Monto protagonista: si hay filtro de categoría activo, mostrar solo esa categoría
+  const filteredCategoryMeta = categoryFilter ? getCategoryMeta(categoryFilter, customCategories) : null;
+  const heroTotal = categoryFilter
+    ? monthExpenses.filter(e => e.currency === activeCurrency && e.category === categoryFilter).reduce((s, e) => s + e.amount, 0)
+    : totalExp;
+
   // ── TC ──────────────────────────────────────────────────────────────────────
   const billingSummaries = buildBillingSummaries(expenses, cards, billingPayments);
   const relevantBillings = billingSummaries.filter(
@@ -159,9 +165,9 @@ export function DashboardContent() {
     ...monthIncomes.map(i => ({ kind: "income" as const, id: i.id, date: i.date, data: i })),
   ].sort((a, b) => b.date.localeCompare(a.date));
 
-  const movements = movementFilter === "all"
+  const movements = categoryFilter === null
     ? allMovements
-    : allMovements.filter(m => m.kind === "expense" && m.data.category === movementFilter);
+    : allMovements.filter(m => m.kind === "expense" && m.data.category === categoryFilter);
 
   const handleDeleteIncome = async (id: string) => {
     await deleteIncome(id);
@@ -207,11 +213,14 @@ export function DashboardContent() {
 
       {/* ── Dashboard resumen ── */}
       <SummaryCard
-        total={totalExp}
+        total={heroTotal}
+        label={filteredCategoryMeta ? `Gastado en ${filteredCategoryMeta.label}` : "Gastado en el mes"}
         currency={activeCurrency}
         hasUSD={hasUSD}
         onCurrencyChange={setSummaryCurrency}
         donutData={donutData}
+        categoryFilter={categoryFilter}
+        onSelectCategory={cat => setCategoryFilter(prev => prev === cat ? null : cat)}
       />
 
       {/* ── Resúmenes TC ── */}
@@ -299,7 +308,7 @@ export function DashboardContent() {
             Movimientos
           </p>
           {customCategories.length > 0 && (
-            <Select value={movementFilter} onValueChange={setMovementFilter}>
+            <Select value={categoryFilter ?? "all"} onValueChange={v => setCategoryFilter(v === "all" ? null : v)}>
               <SelectTrigger className="h-7 w-auto gap-1.5 text-xs border-0 bg-muted px-2.5">
                 <SelectValue />
               </SelectTrigger>
@@ -318,7 +327,7 @@ export function DashboardContent() {
           <div className="text-center py-10 text-muted-foreground">
             <Wallet className="h-10 w-10 mx-auto mb-3 opacity-20" />
             <p className="text-sm">
-              {movementFilter === "all" ? `Sin movimientos en ${getMonthName(viewMonth)}` : "Sin movimientos en esta categoría"}
+              {categoryFilter === null ? `Sin movimientos en ${getMonthName(viewMonth)}` : "Sin movimientos en esta categoría"}
             </p>
           </div>
         ) : (
@@ -391,13 +400,16 @@ export function DashboardContent() {
 // ─── SummaryCard ──────────────────────────────────────────────────────────────
 
 function SummaryCard({
-  total, currency, hasUSD, onCurrencyChange, donutData,
+  total, label, currency, hasUSD, onCurrencyChange, donutData, categoryFilter, onSelectCategory,
 }: {
   total: number;
+  label: string;
   currency: "ARS" | "USD";
   hasUSD: boolean;
   onCurrencyChange: (c: "ARS" | "USD") => void;
-  donutData: { label: string; icon: string; value: number; percent: number; color: string }[];
+  donutData: { label: string; icon: string; value: number; percent: number; color: string; rawCategory: string | null }[];
+  categoryFilter: string | null;
+  onSelectCategory: (cat: string) => void;
 }) {
   const hasData = donutData.length > 0;
 
@@ -406,7 +418,7 @@ function SummaryCard({
       <CardContent className="p-5">
         <div className="flex items-start justify-between mb-1">
           <p className="text-[11px] text-muted-foreground uppercase tracking-wider font-medium">
-            Gastado en el mes
+            {label}
           </p>
           {hasUSD && (
             <div className="flex rounded-full bg-muted p-0.5 gap-0.5">
@@ -431,7 +443,7 @@ function SummaryCard({
         </p>
 
         {hasData ? (
-          <ExpenseDonutChart data={donutData} total={total} currency={currency} />
+          <ExpenseDonutChart data={donutData} categoryFilter={categoryFilter} onSelectCategory={onSelectCategory} />
         ) : (
           <p className="text-xs text-muted-foreground py-2">Sin gastos categorizados este mes</p>
         )}
@@ -443,29 +455,35 @@ function SummaryCard({
 // ─── ExpenseDonutChart ────────────────────────────────────────────────────────
 // Mismo estilo/lógica que el donut de Portafolio (inversiones): track + slices
 // con gap, hover que resalta el slice y muestra su detalle en el centro,
-// leyenda con barra proporcional debajo.
+// leyenda con barra proporcional debajo. Clickear un slice/leyenda filtra
+// el resto de Inicio (hero + movimientos) por esa categoría.
 
 function ExpenseDonutChart({
-  data, total, currency,
+  data, categoryFilter, onSelectCategory,
 }: {
-  data: { label: string; icon: string; value: number; percent: number; color: string }[];
-  total: number;
-  currency: "ARS" | "USD";
+  data: { label: string; icon: string; value: number; percent: number; color: string; rawCategory: string | null }[];
+  categoryFilter: string | null;
+  onSelectCategory: (cat: string) => void;
 }) {
   const [hovered, setHovered] = useState<string | null>(null);
 
-  const SIZE    = 108;
-  const STROKE  = 16;
+  const SIZE    = 132;
+  const STROKE  = 18;
   const R       = (SIZE - STROKE) / 2;
   const CIRCUMF = 2 * Math.PI * R;
   const GAP     = CIRCUMF * 0.012;
 
   let cumulativePct = 0;
-  const activeSlice = hovered ? data.find(d => d.label === hovered) : null;
+  const selectedLabel = categoryFilter
+    ? data.find(d => d.rawCategory === categoryFilter)?.label ?? null
+    : null;
+  const activeSlice = hovered
+    ? data.find(d => d.label === hovered)
+    : selectedLabel ? data.find(d => d.label === selectedLabel) : null;
 
   return (
-    <div className="flex items-center gap-5">
-      {/* Donut */}
+    <div className="flex items-center gap-3">
+      {/* Donut — ocupa más espacio que la leyenda */}
       <div className="relative shrink-0" style={{ width: SIZE, height: SIZE }}>
         <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`} className="-rotate-90">
           <circle
@@ -478,7 +496,9 @@ function ExpenseDonutChart({
             const dash   = (slice.percent / 100) * CIRCUMF - GAP;
             const offset = -(cumulativePct / 100) * CIRCUMF;
             cumulativePct += slice.percent;
-            const isActive = hovered === slice.label;
+            const isHovered  = hovered === slice.label;
+            const isSelected = selectedLabel === slice.label;
+            const dimmed = selectedLabel !== null && !isSelected && !isHovered;
             return (
               <circle
                 key={slice.label}
@@ -487,21 +507,23 @@ function ExpenseDonutChart({
                 r={R}
                 fill="none"
                 stroke={slice.color}
-                strokeWidth={isActive ? STROKE + 3 : STROKE}
+                strokeWidth={isHovered || isSelected ? STROKE + 3 : STROKE}
+                strokeOpacity={dimmed ? 0.35 : 1}
                 strokeDasharray={`${Math.max(0, dash)} ${CIRCUMF}`}
                 strokeDashoffset={offset}
                 strokeLinecap="butt"
-                style={{ transition: "stroke-width 0.15s ease" }}
-                className="cursor-pointer"
+                style={{ transition: "stroke-width 0.15s ease, stroke-opacity 0.15s ease" }}
+                className={slice.rawCategory ? "cursor-pointer" : ""}
                 onMouseEnter={() => setHovered(slice.label)}
                 onMouseLeave={() => setHovered(null)}
+                onClick={() => slice.rawCategory && onSelectCategory(slice.rawCategory)}
                 onTouchStart={() => setHovered(h => h === slice.label ? null : slice.label)}
               />
             );
           })}
         </svg>
 
-        {/* Centro — solo al hacer hover, muestra la categoría activa */}
+        {/* Centro — solo al hacer hover/seleccionar, muestra la categoría activa */}
         {activeSlice && (
           <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none">
             <span className="text-sm">{activeSlice.icon}</span>
@@ -513,18 +535,20 @@ function ExpenseDonutChart({
       </div>
 
       {/* Leyenda */}
-      <div className="flex-1 min-w-0 space-y-1.5">
+      <div className="w-24 shrink-0 space-y-1.5">
         {data.map(slice => {
-          const isActive = hovered === slice.label;
+          const isHovered  = hovered === slice.label;
+          const isSelected = selectedLabel === slice.label;
           return (
             <button
               key={slice.label}
+              disabled={!slice.rawCategory}
               className={`w-full flex items-center gap-1.5 rounded-md px-1.5 py-1 -mx-1.5 transition-colors text-left ${
-                isActive ? "bg-muted/60" : "hover:bg-muted/30"
-              }`}
+                isSelected ? "bg-muted" : isHovered ? "bg-muted/60" : "hover:bg-muted/30"
+              } ${!slice.rawCategory ? "cursor-default" : ""}`}
               onMouseEnter={() => setHovered(slice.label)}
               onMouseLeave={() => setHovered(null)}
-              onClick={() => setHovered(h => h === slice.label ? null : slice.label)}
+              onClick={() => slice.rawCategory && onSelectCategory(slice.rawCategory)}
             >
               <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: slice.color }} />
               <span className="text-xs truncate">{slice.icon} {slice.label}</span>
@@ -727,12 +751,12 @@ function topCategoriesWithOther(
   const rest = totals.slice(max);
   const result = top.map((t, i) => {
     const meta = getCategoryMeta(t.category, customCategories);
-    return { label: meta.label, icon: meta.icon, value: t.total, percent: t.percent, color: DONUT_COLORS[i] };
+    return { label: meta.label, icon: meta.icon, value: t.total, percent: t.percent, color: DONUT_COLORS[i], rawCategory: t.category as string | null };
   });
   if (rest.length > 0) {
     const restTotal = rest.reduce((s, t) => s + t.total, 0);
     const restPercent = rest.reduce((s, t) => s + t.percent, 0);
-    result.push({ label: "Otras", icon: "•", value: restTotal, percent: restPercent, color: DONUT_OTHER_COLOR });
+    result.push({ label: "Otras", icon: "•", value: restTotal, percent: restPercent, color: DONUT_OTHER_COLOR, rawCategory: null });
   }
   return result;
 }
