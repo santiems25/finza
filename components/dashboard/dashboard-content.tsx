@@ -14,7 +14,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  getCreditCards, getExpenses, getIncomes, deleteIncome,
+  getCreditCards, getExpenses, getIncomes, deleteIncome, deleteExpense,
   getBillingPayments, markBillingAsPaid, unmarkBillingAsPaid,
   getCustomCategories, getMonthlyConfigs, getAccounts,
 } from "@/lib/supabase";
@@ -179,6 +179,12 @@ export function DashboardContent() {
     load();
   };
 
+  const handleDeleteExpense = async (id: string) => {
+    await deleteExpense(id);
+    toast({ title: "Gasto eliminado" });
+    load();
+  };
+
   // Fecha inicial para los forms (primer día del mes visible)
   const defaultDate = `${viewYear}-${String(viewMonth + 1).padStart(2, "0")}-01`;
 
@@ -340,7 +346,7 @@ export function DashboardContent() {
               {movements.slice(0, visibleMovements).map((m, i) => (
                 <div key={`${m.kind}-${m.id}`}>
                   {m.kind === "expense"
-                    ? <ExpenseRow expense={m.data} cards={cards} customCategories={customCategories} />
+                    ? <ExpenseRow expense={m.data} cards={cards} customCategories={customCategories} onDelete={handleDeleteExpense} />
                     : <IncomeRow income={m.data} onDelete={handleDeleteIncome} />}
                   {i < Math.min(movements.length, visibleMovements) - 1 && <Separator />}
                 </div>
@@ -578,11 +584,12 @@ function ExpenseDonutChart({
 // ─── ExpenseRow / IncomeRow ───────────────────────────────────────────────────
 
 function ExpenseRow({
-  expense, cards, customCategories,
+  expense, cards, customCategories, onDelete,
 }: {
   expense: Expense;
   cards: CreditCardType[];
   customCategories: ExpenseCustomCategory[];
+  onDelete: (id: string) => void;
 }) {
   const card = cards.find(c => c.id === expense.credit_card_id);
   const { icon, label, bg, text } = getCategoryMeta(expense.category, customCategories);
@@ -612,6 +619,13 @@ function ExpenseRow({
       <span className={`text-sm font-semibold shrink-0 ${expense.currency === "USD" ? "text-emerald-500" : ""}`}>
         −{formatCurrency(expense.amount, expense.currency)}
       </span>
+      <Button
+        variant="ghost" size="icon"
+        className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0 -mr-1"
+        onClick={() => onDelete(expense.id)}
+      >
+        <Trash2 className="h-3.5 w-3.5" />
+      </Button>
     </div>
   );
 }
