@@ -83,13 +83,3 @@ export function totalBalance(accounts: Account[], data: BalanceData): { ars: num
   }
   return { ars, usd };
 }
-
-/** Total de TC pendiente de pago (para el aviso de proyección). */
-export function pendingTC(expenses: Expense[], billingPayments: BillingPayment[]): { ars: number; usd: number } {
-  let ars = 0, usd = 0;
-  for (const e of expenses) {
-    if (e.payment_method !== "credito" || isTCPaid(e, billingPayments)) continue;
-    if (e.currency === "ARS") ars += e.amount; else usd += e.amount;
-  }
-  return { ars, usd };
-}

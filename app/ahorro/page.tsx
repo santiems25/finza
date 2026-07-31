@@ -2,14 +2,14 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { Landmark } from "lucide-react";
-import { SavingsOverview } from "@/components/ahorro/savings-overview";
+import { DollarExchange } from "@/components/ahorro/dollar-exchange";
 import { AccountsManager } from "@/components/ahorro/accounts-manager";
 import {
   getExpenses, getIncomes, getFxTransactions,
   addFxTransaction, deleteFxTransaction,
   getBillingPayments, getCreditCards,
   getAccounts, upsertAccount, deleteAccount,
-  getTransfers, addTransfer, deleteTransfer,
+  getTransfers, addTransfer,
 } from "@/lib/supabase";
 import type {
   Expense, Income, FxTransaction, BillingPayment, Account, CreditCard, AccountTransfer,
@@ -86,22 +86,21 @@ export default function AhorroPage() {
         </p>
       </div>
 
-      <SavingsOverview
-        accounts={accounts}
-        data={data}
-        onAddFx={async (tx) => { await addFxTransaction(tx); load(); }}
-        onDeleteFx={async (id) => { await deleteFxTransaction(id); load(); }}
-      />
-
-      <Separator className="my-6" />
-
       <AccountsManager
         accounts={accounts}
         data={data}
         onUpsert={async (a) => { await upsertAccount(a); load(); }}
         onDelete={async (id) => { await deleteAccount(id); load(); }}
         onAddTransfer={async (t) => { await addTransfer(t); load(); }}
-        onDeleteTransfer={async (id) => { await deleteTransfer(id); load(); }}
+      />
+
+      <Separator className="my-6" />
+
+      <DollarExchange
+        accounts={accounts}
+        transactions={fxTxs}
+        onAddFx={async (tx) => { await addFxTransaction(tx); load(); }}
+        onDeleteFx={async (id) => { await deleteFxTransaction(id); load(); }}
       />
     </div>
   );

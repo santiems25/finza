@@ -7,14 +7,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { formatCurrency, formatDate, parseAmount } from "@/lib/utils";
-import { accountBalance, type BalanceData } from "@/lib/balances";
+import { formatCurrency, parseAmount } from "@/lib/utils";
+import { accountBalance, totalBalance, type BalanceData } from "@/lib/balances";
 import type { Account, AccountTransfer, Currency } from "@/types";
 
 const ACCOUNT_TYPE_ICONS: Record<string, React.ReactNode> = {
@@ -35,10 +36,9 @@ interface Props {
   onUpsert: (a: Partial<Account>) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   onAddTransfer: (t: Omit<AccountTransfer, "id" | "created_at">) => Promise<void>;
-  onDeleteTransfer: (id: string) => Promise<void>;
 }
 
-export function AccountsManager({ accounts, data, onUpsert, onDelete, onAddTransfer, onDeleteTransfer }: Props) {
+export function AccountsManager({ accounts, data, onUpsert, onDelete, onAddTransfer }: Props) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Account | null>(null);
   const [transferOpen, setTransferOpen] = useState(false);
@@ -56,14 +56,33 @@ export function AccountsManager({ accounts, data, onUpsert, onDelete, onAddTrans
     await onDelete(a.id);
   };
 
-  const balanceOf = (account: Account) => accountBalance(account, data);
+  const total = totalBalance(accounts, data);
+  const hasUSD = accounts.some(a => a.initial_usd !== 0) || data.expenses.some(e => e.currency === "USD") || data.incomes.some(i => i.currency === "USD");
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-          Cuentas
-        </p>
+    <Card className="rounded-2xl border-border/50 shadow-none">
+      <CardContent className="p-5 space-y-4">
+        {/* Total acoplado con las cuentas que lo componen */}
+        <div>
+          <p className="text-[11px] text-muted-foreground uppercase tracking-wider font-medium mb-1">
+            Ahorro total
+          </p>
+          <div className="flex items-baseline gap-4 flex-wrap">
+            <p
+              className="text-[2.25rem] leading-tight font-bold tracking-tight"
+              style={{ fontFamily: "ui-rounded, 'SF Pro Rounded', system-ui, sans-serif" }}
+            >
+              {formatCurrency(total.ars, "ARS")}
+            </p>
+            {hasUSD && (
+              <p className="text-lg font-semibold text-emerald-600">
+                {formatCurrency(total.usd, "USD")}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* Botones */}
         <div className="flex gap-1.5">
           {accounts.length >= 2 && (
             <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs" onClick={() => setTransferOpen(true)}>
@@ -74,87 +93,88 @@ export function AccountsManager({ accounts, data, onUpsert, onDelete, onAddTrans
             <Plus className="h-3.5 w-3.5" /> Nueva cuenta
           </Button>
         </div>
-      </div>
 
-      {accounts.length === 0 ? (
-        <p className="text-xs text-muted-foreground text-center py-4">
-          No hay cuentas. Creá una para rastrear el saldo por banco.
-        </p>
-      ) : (
-        accounts.map(account => {
-          const bal = balanceOf(account);
-          return (
-            <Card key={account.id} className="rounded-2xl border-border/50 shadow-none">
-              <CardContent className="p-3 flex items-center gap-3">
-                <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary shrink-0">
-                  {ACCOUNT_TYPE_ICONS[account.account_type]}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-semibold truncate">{account.name}</p>
-                    <Badge variant="outline" className="text-[10px] h-4 px-1.5">
-                      {ACCOUNT_TYPE_LABELS[account.account_type]}
-                    </Badge>
+        <Separator />
+
+        {/* Cuentas que componen el total */}
+        {accounts.length === 0 ? (
+          <p className="text-xs text-muted-foreground text-center py-4">
+            No hay cuentas. Creá una para rastrear el saldo por banco.
+          </p>
+        ) : (
+          <div className="-mx-5">
+            {accounts.map((account, i) => {
+              const bal = accountBalance(account, data);
+              return (
+                <div key={account.id}>
+                  <div className="flex items-center gap-3 px-5 py-2.5">
+                    <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                      {ACCOUNT_TYPE_ICONS[account.account_type]}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-semibold truncate">{account.name}</p>
+                        <Badge variant="outline" className="text-[10px] h-4 px-1.5">
+                          {ACCOUNT_TYPE_LABELS[account.account_type]}
+                        </Badge>
+                      </div>
+                      <div className="flex gap-3 mt-0.5">
+                        {(bal.ars !== 0 || account.initial_ars !== 0) && (
+                          <p className={`text-xs font-medium ${bal.ars >= 0 ? "text-primary" : "text-destructive"}`}>
+                            {formatCurrency(bal.ars, "ARS")}
+                          </p>
+                        )}
+                        {(bal.usd !== 0 || account.initial_usd !== 0) && (
+                          <p className={`text-xs font-medium ${bal.usd >= 0 ? "text-emerald-600" : "text-destructive"}`}>
+                            {formatCurrency(bal.usd, "USD")}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex gap-1 shrink-0">
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={() => openEdit(account)}>
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => handleDelete(account)}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
                   </div>
-                  <div className="flex gap-3 mt-0.5">
-                    {(bal.ars !== 0 || account.initial_ars !== 0) && (
-                      <p className={`text-xs font-medium ${bal.ars >= 0 ? "text-primary" : "text-destructive"}`}>
-                        {formatCurrency(bal.ars, "ARS")}
-                      </p>
-                    )}
-                    {(bal.usd !== 0 || account.initial_usd !== 0) && (
-                      <p className={`text-xs font-medium ${bal.usd >= 0 ? "text-emerald-600" : "text-destructive"}`}>
-                        {formatCurrency(bal.usd, "USD")}
-                      </p>
-                    )}
-                  </div>
+                  {i < accounts.length - 1 && <Separator />}
                 </div>
-                <div className="flex gap-1 shrink-0">
-                  <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={() => openEdit(account)}>
-                    <Pencil className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => handleDelete(account)}>
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          );
-        })
-      )}
+              );
+            })}
+          </div>
+        )}
 
-      {/* Historial de transferencias */}
-      {data.transfers.length > 0 && (
-        <TransferHistory transfers={data.transfers} accounts={accounts} onDelete={onDeleteTransfer} />
-      )}
+        <Dialog open={open} onOpenChange={setOpen}>
+          <DialogContent className="max-w-sm mx-auto">
+            <DialogHeader>
+              <DialogTitle>{editing ? "Editar cuenta" : "Nueva cuenta"}</DialogTitle>
+            </DialogHeader>
+            <AccountForm
+              initial={editing ?? undefined}
+              onSave={handleSave}
+              onCancel={() => setOpen(false)}
+            />
+          </DialogContent>
+        </Dialog>
 
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-sm mx-auto">
-          <DialogHeader>
-            <DialogTitle>{editing ? "Editar cuenta" : "Nueva cuenta"}</DialogTitle>
-          </DialogHeader>
-          <AccountForm
-            initial={editing ?? undefined}
-            onSave={handleSave}
-            onCancel={() => setOpen(false)}
-          />
-        </DialogContent>
-      </Dialog>
-
-      {/* Dialog transferencia */}
-      <Dialog open={transferOpen} onOpenChange={setTransferOpen}>
-        <DialogContent className="max-w-sm mx-auto">
-          <DialogHeader>
-            <DialogTitle>Transferir entre cuentas</DialogTitle>
-          </DialogHeader>
-          <TransferForm
-            accounts={accounts}
-            onSave={async (t) => { await onAddTransfer(t); setTransferOpen(false); }}
-            onCancel={() => setTransferOpen(false)}
-          />
-        </DialogContent>
-      </Dialog>
-    </div>
+        {/* Dialog transferencia */}
+        <Dialog open={transferOpen} onOpenChange={setTransferOpen}>
+          <DialogContent className="max-w-sm mx-auto">
+            <DialogHeader>
+              <DialogTitle>Transferir entre cuentas</DialogTitle>
+            </DialogHeader>
+            <TransferForm
+              accounts={accounts}
+              onSave={async (t) => { await onAddTransfer(t); setTransferOpen(false); }}
+              onCancel={() => setTransferOpen(false)}
+            />
+          </DialogContent>
+        </Dialog>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -266,60 +286,6 @@ function TransferForm({
         </Button>
       </div>
     </form>
-  );
-}
-
-// ─── TransferHistory ──────────────────────────────────────────────────────────
-
-function TransferHistory({
-  transfers, accounts, onDelete,
-}: {
-  transfers: AccountTransfer[];
-  accounts: Account[];
-  onDelete: (id: string) => void;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  const nameOf = (id: string) => accounts.find(a => a.id === id)?.name ?? "?";
-
-  return (
-    <Card className="rounded-2xl border-border/50 shadow-none">
-      <button
-        className="w-full text-left px-3 py-2.5 flex items-center justify-between"
-        onClick={() => setExpanded(e => !e)}
-      >
-        <span className="text-xs font-semibold flex items-center gap-2">
-          <ArrowRightLeft className="h-3.5 w-3.5 text-primary" />
-          Transferencias
-          <Badge variant="outline" className="text-[10px] h-4 px-1.5">{transfers.length}</Badge>
-        </span>
-        <span className="text-[10px] text-muted-foreground">{expanded ? "Ocultar" : "Ver"}</span>
-      </button>
-
-      {expanded && (
-        <CardContent className="pt-0 px-3 pb-3 space-y-2">
-          {transfers.map(t => (
-            <div key={t.id} className="flex items-center gap-2 text-xs">
-              <div className="flex-1 min-w-0">
-                <p className="font-medium truncate">
-                  {nameOf(t.from_account_id)} → {nameOf(t.to_account_id)}
-                </p>
-                <p className="text-[10px] text-muted-foreground">{formatDate(t.date)}</p>
-              </div>
-              <span className="font-semibold shrink-0">
-                {formatCurrency(t.amount, t.currency)}
-              </span>
-              <Button
-                variant="ghost" size="icon"
-                className="h-6 w-6 text-muted-foreground hover:text-destructive shrink-0"
-                onClick={() => onDelete(t.id)}
-              >
-                <Trash2 className="h-3 w-3" />
-              </Button>
-            </div>
-          ))}
-        </CardContent>
-      )}
-    </Card>
   );
 }
 
