@@ -241,6 +241,13 @@ export async function addIncome(income: Omit<Income, "id" | "created_at">) {
   return data;
 }
 
+export async function addIncomes(incomes: Omit<Income, "id" | "created_at">[]) {
+  const user_id = await uid();
+  const { data, error } = await supabase.from("incomes").insert(incomes.map(i => ({ ...i, user_id }))).select();
+  if (error) throw error;
+  return data;
+}
+
 export async function deleteIncome(id: string) {
   const { error } = await supabase.from("incomes").delete().eq("id", id);
   if (error) throw error;

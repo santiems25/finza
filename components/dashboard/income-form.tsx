@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { addIncome, getAccounts } from "@/lib/supabase";
+import { addIncome, addIncomes, getAccounts } from "@/lib/supabase";
 import type { Currency, IncomeSource, Account } from "@/types";
 import { INCOME_SOURCE_LABELS, INCOME_SOURCE_ICONS } from "@/types";
 
@@ -14,9 +14,19 @@ interface Props {
   onSaved: () => void;
 }
 
+const RECURRING_MONTHS = 12; // horizonte de generación para movimientos recurrentes
+
+// Agrega N meses a una fecha YYYY-MM-DD
+function addMonths(dateStr: string, months: number): string {
+  const d = new Date(dateStr + "T00:00:00");
+  d.setMonth(d.getMonth() + months);
+  return d.toISOString().split("T")[0];
+}
+
 export function IncomeForm({ defaultDate, onSaved }: Props) {
   const [saving, setSaving] = useState(false);
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [isRecurring, setIsRecurring] = useState(false);
   const [form, setForm] = useState({
     amount:      "",
     currency:    "ARS" as Currency,
@@ -38,14 +48,23 @@ export function IncomeForm({ defaultDate, onSaved }: Props) {
     if (!form.amount || !form.description) return;
     setSaving(true);
     try {
-      await addIncome({
+      const base = {
         amount:      parseFloat(form.amount),
         currency:    form.currency,
         description: form.description,
         source:      form.source,
-        date:        form.date,
         account_id:  form.account_id || null,
-      });
+      };
+      if (isRecurring) {
+        const records = Array.from({ length: RECURRING_MONTHS }, (_, i) => ({
+          ...base,
+          date: addMonths(form.date, i),
+          is_recurring: true,
+        }));
+        await addIncomes(records);
+      } else {
+        await addIncome({ ...base, date: form.date, is_recurring: false });
+      }
       onSaved();
     } finally {
       setSaving(false);
@@ -131,6 +150,22 @@ export function IncomeForm({ defaultDate, onSaved }: Props) {
           required
         />
       </div>
+
+      {/* Recurrente */}
+      <label className="flex items-start gap-2.5 rounded-lg bg-muted/40 px-3 py-2.5 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={isRecurring}
+          onChange={e => setIsRecurring(e.target.checked)}
+          className="mt-0.5 h-4 w-4 accent-[#2d5016]"
+        />
+        <span>
+          <span className="text-xs font-medium block">Es un ingreso recurrente</span>
+          <span className="text-[11px] text-muted-foreground">
+            Se repite automáticamente todos los meses (sueldo, etc.) por los próximos {RECURRING_MONTHS} meses
+          </span>
+        </span>
+      </label>
 
       <Button type="submit" className="w-full" disabled={saving}>
         {saving ? "Guardando..." : "Registrar ingreso"}

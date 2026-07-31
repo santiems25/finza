@@ -23,6 +23,7 @@ interface Props {
 }
 
 const today = new Date().toISOString().split("T")[0];
+const RECURRING_MONTHS = 12; // horizonte de generación para movimientos recurrentes
 
 // Agrega N meses a una fecha YYYY-MM-DD
 function addMonths(dateStr: string, months: number): string {
@@ -46,6 +47,7 @@ export function ExpenseForm({ cards, monthlyConfigs, accounts, customCategories,
     installments: "1",
     notes: "",
   });
+  const [isRecurring, setIsRecurring] = useState(false);
 
   const set = (field: string, value: string) =>
     setForm(prev => ({ ...prev, [field]: value }));
@@ -79,12 +81,13 @@ export function ExpenseForm({ cards, monthlyConfigs, accounts, customCategories,
 
     try {
       const total    = parseAmount(form.amount);
-      const perCuota = parseFloat((total / numCuotas).toFixed(2));
+      const count    = isRecurring ? RECURRING_MONTHS : numCuotas;
+      const perCuota = isRecurring ? total : parseFloat((total / numCuotas).toFixed(2));
 
-      // Generar N registros (uno por cuota).
-      // Cada cuota avanza 1 mes: así el trigger de Supabase calcula el billing
-      // period correcto para cada una.
-      const records = Array.from({ length: numCuotas }, (_, i) => {
+      // Generar N registros (uno por cuota, o uno por mes si es recurrente).
+      // Cada uno avanza 1 mes: así el trigger de Supabase calcula el billing
+      // period correcto para cada uno.
+      const records = Array.from({ length: count }, (_, i) => {
         const expenseDate = addMonths(form.date, i);
 
         let billing_period: string | null = null;
@@ -118,8 +121,9 @@ export function ExpenseForm({ cards, monthlyConfigs, accounts, customCategories,
           billing_period,
           billing_month,
           billing_year,
-          total_installments: numCuotas,
-          installment_number: i + 1,
+          total_installments: isRecurring ? 1 : numCuotas,
+          installment_number: isRecurring ? 1 : i + 1,
+          is_recurring:       isRecurring,
           notes:              form.notes || null,
         };
       });
@@ -266,7 +270,7 @@ export function ExpenseForm({ cards, monthlyConfigs, accounts, customCategories,
 
           <div>
             <Label className="text-xs mb-1.5 block">Cuotas</Label>
-            <Select value={form.installments} onValueChange={v => set("installments", v)}>
+            <Select value={form.installments} onValueChange={v => set("installments", v)} disabled={isRecurring}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 {[1,2,3,6,9,12,18,24].map(n => (
@@ -302,6 +306,26 @@ export function ExpenseForm({ cards, monthlyConfigs, accounts, customCategories,
           )}
         </>
       )}
+
+      {/* Recurrente */}
+      <label className="flex items-start gap-2.5 rounded-lg bg-muted/40 px-3 py-2.5 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={isRecurring}
+          onChange={e => {
+            const checked = e.target.checked;
+            setIsRecurring(checked);
+            if (checked) set("installments", "1");
+          }}
+          className="mt-0.5 h-4 w-4 accent-[#2d5016]"
+        />
+        <span>
+          <span className="text-xs font-medium block">Es un gasto recurrente</span>
+          <span className="text-[11px] text-muted-foreground">
+            Se repite automáticamente todos los meses (alquiler, suscripciones, etc.) por los próximos {RECURRING_MONTHS} meses
+          </span>
+        </span>
+      </label>
 
       {/* Notas opcionales */}
       <div>

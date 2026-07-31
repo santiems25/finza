@@ -58,6 +58,7 @@ export interface Expense {
   // Cuotas
   total_installments: number;    // 1 = pago único
   installment_number: number;    // 1-based
+  is_recurring: boolean;
   notes: string | null;
   created_at: string;
 }
@@ -117,6 +118,7 @@ export interface Income {
   source: IncomeSource;
   date: string;        // YYYY-MM-DD
   account_id: string | null;
+  is_recurring: boolean;
   created_at: string;
 }
 

@@ -46,6 +46,7 @@ interface PeriodSummary {
 // Paleta tierra/pastel validada (ver skill dataviz) — orden fijo, no cíclico
 const DONUT_COLORS = ["#b5502e", "#c9a92e", "#2d7a3a", "#8a4a9e", "#a83d3d"];
 const DONUT_OTHER_COLOR = "#9c9a92";
+const MOVEMENTS_PAGE_SIZE = 8;
 
 export function DashboardContent() {
   const now = new Date();
@@ -57,6 +58,7 @@ export function DashboardContent() {
   const [billingCollapsedOpen, setBillingCollapsedOpen] = useState(false);
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
+  const [movementsExpanded, setMovementsExpanded] = useState(false);
 
   const [expenses,        setExpenses]        = useState<Expense[]>([]);
   const [incomes,         setIncomes]         = useState<Income[]>([]);
@@ -84,6 +86,7 @@ export function DashboardContent() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { setMovementsExpanded(false); }, [viewMonth, viewYear, categoryFilter]);
 
   // ── Navegación mes ──────────────────────────────────────────────────────────
   const prevMonth = () => {
@@ -115,7 +118,7 @@ export function DashboardContent() {
 
   // ── Categorías (solo moneda activa, top 4 + Otras) ──────────────────────────
   const categoryTotals = getCategoryTotals(monthExpenses.filter(e => e.currency === activeCurrency));
-  const donutData = topCategoriesWithOther(categoryTotals, customCategories);
+  const donutData = topCategoriesWithOther(categoryTotals, customCategories, 5);
 
   // Monto protagonista: si hay filtro de categoría activo, mostrar solo esa categoría
   const filteredCategoryMeta = categoryFilter ? getCategoryMeta(categoryFilter, customCategories) : null;
@@ -168,6 +171,7 @@ export function DashboardContent() {
   const movements = categoryFilter === null
     ? allMovements
     : allMovements.filter(m => m.kind === "expense" && m.data.category === categoryFilter);
+  const visibleMovements = movementsExpanded ? movements.length : MOVEMENTS_PAGE_SIZE;
 
   const handleDeleteIncome = async (id: string) => {
     await deleteIncome(id);
@@ -333,18 +337,28 @@ export function DashboardContent() {
         ) : (
           <Card className="rounded-2xl border-border/50 shadow-none">
             <CardContent className="p-0">
-              {movements.slice(0, 12).map((m, i) => (
+              {movements.slice(0, visibleMovements).map((m, i) => (
                 <div key={`${m.kind}-${m.id}`}>
                   {m.kind === "expense"
                     ? <ExpenseRow expense={m.data} cards={cards} customCategories={customCategories} />
                     : <IncomeRow income={m.data} onDelete={handleDeleteIncome} />}
-                  {i < Math.min(movements.length, 12) - 1 && <Separator />}
+                  {i < Math.min(movements.length, visibleMovements) - 1 && <Separator />}
                 </div>
               ))}
-              {movements.length > 12 && (
-                <p className="text-xs text-center text-muted-foreground py-3">
-                  +{movements.length - 12} más
-                </p>
+              {movements.length > visibleMovements ? (
+                <button
+                  className="w-full text-xs text-center text-primary font-medium py-3 hover:bg-muted/30 transition-colors"
+                  onClick={() => setMovementsExpanded(true)}
+                >
+                  Ver {movements.length - visibleMovements} más
+                </button>
+              ) : movementsExpanded && movements.length > MOVEMENTS_PAGE_SIZE && (
+                <button
+                  className="w-full text-xs text-center text-muted-foreground font-medium py-3 hover:bg-muted/30 transition-colors"
+                  onClick={() => setMovementsExpanded(false)}
+                >
+                  Ver menos
+                </button>
               )}
             </CardContent>
           </Card>
