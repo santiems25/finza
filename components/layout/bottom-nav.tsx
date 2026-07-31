@@ -2,12 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, ListMinus, TrendingUp, Landmark, CreditCard } from "lucide-react";
+import { LayoutDashboard, TrendingUp, Landmark, CreditCard } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
   { href: "/",              icon: LayoutDashboard, label: "Inicio"    },
-  { href: "/gastos",        icon: ListMinus,       label: "Gastos"    },
   { href: "/ahorro",        icon: Landmark,        label: "Ahorro"    },
   { href: "/inversiones",   icon: TrendingUp,      label: "Portafolio" },
   { href: "/configuracion", icon: CreditCard,       label: "Tarjetas"  },
