@@ -454,115 +454,88 @@ function ExpenseDonutChart({
 }) {
   const [hovered, setHovered] = useState<string | null>(null);
 
-  const SIZE    = 220;
-  const STROKE  = 32;
+  const SIZE    = 88;
+  const STROKE  = 14;
   const R       = (SIZE - STROKE) / 2;
   const CIRCUMF = 2 * Math.PI * R;
-  const GAP     = CIRCUMF * 0.008;
+  const GAP     = CIRCUMF * 0.012;
 
   let cumulativePct = 0;
   const activeSlice = hovered ? data.find(d => d.label === hovered) : null;
 
   return (
-    <div className="space-y-5">
+    <div className="flex items-center gap-5">
       {/* Donut */}
-      <div className="flex justify-center">
-        <div className="relative" style={{ width: SIZE, height: SIZE }}>
-          <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`} className="-rotate-90">
-            <circle
-              cx={SIZE / 2} cy={SIZE / 2} r={R}
-              fill="none"
-              stroke="hsl(var(--muted))"
-              strokeWidth={STROKE}
-            />
-            {data.map(slice => {
-              const dash   = (slice.percent / 100) * CIRCUMF - GAP;
-              const offset = -(cumulativePct / 100) * CIRCUMF;
-              cumulativePct += slice.percent;
-              const isActive = hovered === slice.label;
-              return (
-                <circle
-                  key={slice.label}
-                  cx={SIZE / 2}
-                  cy={SIZE / 2}
-                  r={R}
-                  fill="none"
-                  stroke={slice.color}
-                  strokeWidth={isActive ? STROKE + 6 : STROKE}
-                  strokeDasharray={`${Math.max(0, dash)} ${CIRCUMF}`}
-                  strokeDashoffset={offset}
-                  strokeLinecap="butt"
-                  style={{ transition: "stroke-width 0.15s ease" }}
-                  className="cursor-pointer"
-                  onMouseEnter={() => setHovered(slice.label)}
-                  onMouseLeave={() => setHovered(null)}
-                  onTouchStart={() => setHovered(h => h === slice.label ? null : slice.label)}
-                />
-              );
-            })}
-          </svg>
+      <div className="relative shrink-0" style={{ width: SIZE, height: SIZE }}>
+        <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`} className="-rotate-90">
+          <circle
+            cx={SIZE / 2} cy={SIZE / 2} r={R}
+            fill="none"
+            stroke="hsl(var(--muted))"
+            strokeWidth={STROKE}
+          />
+          {data.map(slice => {
+            const dash   = (slice.percent / 100) * CIRCUMF - GAP;
+            const offset = -(cumulativePct / 100) * CIRCUMF;
+            cumulativePct += slice.percent;
+            const isActive = hovered === slice.label;
+            return (
+              <circle
+                key={slice.label}
+                cx={SIZE / 2}
+                cy={SIZE / 2}
+                r={R}
+                fill="none"
+                stroke={slice.color}
+                strokeWidth={isActive ? STROKE + 3 : STROKE}
+                strokeDasharray={`${Math.max(0, dash)} ${CIRCUMF}`}
+                strokeDashoffset={offset}
+                strokeLinecap="butt"
+                style={{ transition: "stroke-width 0.15s ease" }}
+                className="cursor-pointer"
+                onMouseEnter={() => setHovered(slice.label)}
+                onMouseLeave={() => setHovered(null)}
+                onTouchStart={() => setHovered(h => h === slice.label ? null : slice.label)}
+              />
+            );
+          })}
+        </svg>
 
-          {/* Centro — muestra total o slice hovereado */}
-          <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none">
-            {activeSlice ? (
-              <>
-                <span className="text-xl">{activeSlice.icon}</span>
-                <span className="text-sm font-bold mt-0.5" style={{ color: activeSlice.color }}>
-                  {activeSlice.label}
-                </span>
-                <span className="text-xs text-muted-foreground mt-0.5">
-                  {activeSlice.percent.toFixed(1)}% · {formatCurrency(activeSlice.value, currency)}
-                </span>
-              </>
-            ) : (
-              <>
-                <span className="text-xs text-muted-foreground">Total</span>
-                <span className="text-sm font-bold mt-0.5">
-                  {formatCurrency(total, currency)}
-                </span>
-                <span className="text-xs text-muted-foreground mt-0.5">
-                  {data.length} categoría{data.length !== 1 ? "s" : ""}
-                </span>
-              </>
-            )}
-          </div>
+        {/* Centro — muestra total o slice hovereado */}
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none">
+          {activeSlice ? (
+            <>
+              <span className="text-sm">{activeSlice.icon}</span>
+              <span className="text-[10px] font-bold" style={{ color: activeSlice.color }}>
+                {activeSlice.percent.toFixed(0)}%
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="text-[9px] text-muted-foreground">Total</span>
+              <span className="text-[10px] font-bold">{formatCurrency(total, currency)}</span>
+            </>
+          )}
         </div>
       </div>
 
       {/* Leyenda */}
-      <div className="space-y-2">
+      <div className="flex-1 min-w-0 space-y-1.5">
         {data.map(slice => {
           const isActive = hovered === slice.label;
           return (
             <button
               key={slice.label}
-              className={`w-full flex items-center gap-3 rounded-lg px-3 py-2 transition-colors text-left ${
+              className={`w-full flex items-center gap-2 rounded-md px-1.5 py-1 -mx-1.5 transition-colors text-left ${
                 isActive ? "bg-muted/60" : "hover:bg-muted/30"
               }`}
               onMouseEnter={() => setHovered(slice.label)}
               onMouseLeave={() => setHovered(null)}
               onClick={() => setHovered(h => h === slice.label ? null : slice.label)}
             >
-              <div className="flex-shrink-0 flex items-center gap-2 w-20">
-                <div
-                  className="h-2.5 rounded-full"
-                  style={{
-                    width: `${Math.max(8, (slice.percent / data[0].percent) * 56)}px`,
-                    backgroundColor: slice.color,
-                  }}
-                />
-              </div>
-              <span className="text-sm font-medium flex-shrink-0 truncate max-w-[7rem]">
-                {slice.icon} {slice.label}
-              </span>
-              <div className="flex-1 flex items-center justify-end gap-3">
-                <span className="text-xs text-muted-foreground">
-                  {slice.percent.toFixed(1)}%
-                </span>
-                <span className="text-sm font-medium tabular-nums">
-                  {formatCurrency(slice.value, currency)}
-                </span>
-              </div>
+              <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: slice.color }} />
+              <span className="text-xs truncate flex-1">{slice.icon} {slice.label}</span>
+              <span className="text-xs text-muted-foreground shrink-0">{slice.percent.toFixed(0)}%</span>
             </button>
           );
         })}
