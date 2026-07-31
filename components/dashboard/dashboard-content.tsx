@@ -454,8 +454,8 @@ function ExpenseDonutChart({
 }) {
   const [hovered, setHovered] = useState<string | null>(null);
 
-  const SIZE    = 88;
-  const STROKE  = 14;
+  const SIZE    = 108;
+  const STROKE  = 16;
   const R       = (SIZE - STROKE) / 2;
   const CIRCUMF = 2 * Math.PI * R;
   const GAP     = CIRCUMF * 0.012;
@@ -501,22 +501,15 @@ function ExpenseDonutChart({
           })}
         </svg>
 
-        {/* Centro — muestra total o slice hovereado */}
-        <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none">
-          {activeSlice ? (
-            <>
-              <span className="text-sm">{activeSlice.icon}</span>
-              <span className="text-[10px] font-bold" style={{ color: activeSlice.color }}>
-                {activeSlice.percent.toFixed(0)}%
-              </span>
-            </>
-          ) : (
-            <>
-              <span className="text-[9px] text-muted-foreground">Total</span>
-              <span className="text-[10px] font-bold">{formatCurrency(total, currency)}</span>
-            </>
-          )}
-        </div>
+        {/* Centro — solo al hacer hover, muestra la categoría activa */}
+        {activeSlice && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none">
+            <span className="text-sm">{activeSlice.icon}</span>
+            <span className="text-[10px] font-bold" style={{ color: activeSlice.color }}>
+              {activeSlice.percent.toFixed(0)}%
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Leyenda */}
@@ -526,7 +519,7 @@ function ExpenseDonutChart({
           return (
             <button
               key={slice.label}
-              className={`w-full flex items-center gap-2 rounded-md px-1.5 py-1 -mx-1.5 transition-colors text-left ${
+              className={`w-full flex items-center gap-1.5 rounded-md px-1.5 py-1 -mx-1.5 transition-colors text-left ${
                 isActive ? "bg-muted/60" : "hover:bg-muted/30"
               }`}
               onMouseEnter={() => setHovered(slice.label)}
@@ -534,7 +527,7 @@ function ExpenseDonutChart({
               onClick={() => setHovered(h => h === slice.label ? null : slice.label)}
             >
               <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: slice.color }} />
-              <span className="text-xs truncate flex-1">{slice.icon} {slice.label}</span>
+              <span className="text-xs truncate">{slice.icon} {slice.label}</span>
               <span className="text-xs text-muted-foreground shrink-0">{slice.percent.toFixed(0)}%</span>
             </button>
           );
