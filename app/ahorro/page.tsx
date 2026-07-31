@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { Landmark } from "lucide-react";
-import { DollarExchange } from "@/components/ahorro/dollar-exchange";
+import { DollarPurchaseHistory } from "@/components/ahorro/dollar-exchange";
+import { BuyDollarsButton } from "@/components/ahorro/buy-dollars-button";
 import { AccountsManager } from "@/components/ahorro/accounts-manager";
 import {
   getExpenses, getIncomes, getFxTransactions,
@@ -96,12 +97,17 @@ export default function AhorroPage() {
 
       <Separator className="my-6" />
 
-      <DollarExchange
-        accounts={accounts}
-        transactions={fxTxs}
-        onAddFx={async (tx) => { await addFxTransaction(tx); load(); }}
-        onDeleteFx={async (id) => { await deleteFxTransaction(id); load(); }}
-      />
+      <div className="space-y-3">
+        <BuyDollarsButton
+          accounts={accounts}
+          onAddFx={async (tx) => { await addFxTransaction(tx); load(); }}
+        />
+        <DollarPurchaseHistory
+          accounts={accounts}
+          transactions={fxTxs}
+          onDeleteFx={async (id) => { await deleteFxTransaction(id); load(); }}
+        />
+      </div>
     </div>
   );
 }

@@ -56,30 +56,50 @@ export function AccountsManager({ accounts, data, onUpsert, onDelete, onAddTrans
     await onDelete(a.id);
   };
 
+  const [currency, setCurrency] = useState<Currency>("ARS");
+
   const total = totalBalance(accounts, data);
   const hasUSD = accounts.some(a => a.initial_usd !== 0) || data.expenses.some(e => e.currency === "USD") || data.incomes.some(i => i.currency === "USD");
+
+  // Solo cuentas con algún importe asociado a la moneda seleccionada
+  const accountsWithBalances = accounts.map(a => ({ account: a, bal: accountBalance(a, data) }));
+  const visibleAccounts = accountsWithBalances.filter(({ account, bal }) =>
+    currency === "ARS"
+      ? (bal.ars !== 0 || account.initial_ars !== 0)
+      : (bal.usd !== 0 || account.initial_usd !== 0)
+  );
 
   return (
     <Card className="rounded-2xl border-border/50 shadow-none">
       <CardContent className="p-5 space-y-4">
         {/* Total acoplado con las cuentas que lo componen */}
         <div>
-          <p className="text-[11px] text-muted-foreground uppercase tracking-wider font-medium mb-1">
-            Ahorro total
-          </p>
-          <div className="flex items-baseline gap-4 flex-wrap">
-            <p
-              className="text-[2.25rem] leading-tight font-bold tracking-tight"
-              style={{ fontFamily: "ui-rounded, 'SF Pro Rounded', system-ui, sans-serif" }}
-            >
-              {formatCurrency(total.ars, "ARS")}
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-[11px] text-muted-foreground uppercase tracking-wider font-medium">
+              Ahorro total
             </p>
             {hasUSD && (
-              <p className="text-lg font-semibold text-emerald-600">
-                {formatCurrency(total.usd, "USD")}
-              </p>
+              <div className="flex rounded-full bg-muted p-0.5 gap-0.5">
+                {(["ARS", "USD"] as const).map(c => (
+                  <button
+                    key={c}
+                    onClick={() => setCurrency(c)}
+                    className={`text-[10px] font-semibold px-2 py-0.5 rounded-full transition-colors ${
+                      currency === c ? "bg-background text-foreground shadow" : "text-muted-foreground"
+                    }`}
+                  >
+                    {c}
+                  </button>
+                ))}
+              </div>
             )}
           </div>
+          <p
+            className="text-[2.25rem] leading-tight font-bold tracking-tight"
+            style={{ fontFamily: "ui-rounded, 'SF Pro Rounded', system-ui, sans-serif" }}
+          >
+            {formatCurrency(currency === "ARS" ? total.ars : total.usd, currency)}
+          </p>
         </div>
 
         {/* Botones */}
@@ -96,54 +116,48 @@ export function AccountsManager({ accounts, data, onUpsert, onDelete, onAddTrans
 
         <Separator />
 
-        {/* Cuentas que componen el total */}
+        {/* Cuentas que componen el total, en la moneda seleccionada */}
         {accounts.length === 0 ? (
           <p className="text-xs text-muted-foreground text-center py-4">
             No hay cuentas. Creá una para rastrear el saldo por banco.
           </p>
+        ) : visibleAccounts.length === 0 ? (
+          <p className="text-xs text-muted-foreground text-center py-4">
+            Ninguna cuenta tiene movimientos en {currency}.
+          </p>
         ) : (
           <div className="-mx-5">
-            {accounts.map((account, i) => {
-              const bal = accountBalance(account, data);
-              return (
-                <div key={account.id}>
-                  <div className="flex items-center gap-3 px-5 py-2.5">
-                    <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary shrink-0">
-                      {ACCOUNT_TYPE_ICONS[account.account_type]}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-semibold truncate">{account.name}</p>
-                        <Badge variant="outline" className="text-[10px] h-4 px-1.5">
-                          {ACCOUNT_TYPE_LABELS[account.account_type]}
-                        </Badge>
-                      </div>
-                      <div className="flex gap-3 mt-0.5">
-                        {(bal.ars !== 0 || account.initial_ars !== 0) && (
-                          <p className={`text-xs font-medium ${bal.ars >= 0 ? "text-primary" : "text-destructive"}`}>
-                            {formatCurrency(bal.ars, "ARS")}
-                          </p>
-                        )}
-                        {(bal.usd !== 0 || account.initial_usd !== 0) && (
-                          <p className={`text-xs font-medium ${bal.usd >= 0 ? "text-emerald-600" : "text-destructive"}`}>
-                            {formatCurrency(bal.usd, "USD")}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex gap-1 shrink-0">
-                      <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={() => openEdit(account)}>
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => handleDelete(account)}>
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
+            {visibleAccounts.map(({ account, bal }, i) => (
+              <div key={account.id}>
+                <div className="flex items-center gap-3 px-5 py-2.5">
+                  <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                    {ACCOUNT_TYPE_ICONS[account.account_type]}
                   </div>
-                  {i < accounts.length - 1 && <Separator />}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-semibold truncate">{account.name}</p>
+                      <Badge variant="outline" className="text-[10px] h-4 px-1.5">
+                        {ACCOUNT_TYPE_LABELS[account.account_type]}
+                      </Badge>
+                    </div>
+                    <p className={`text-xs font-medium mt-0.5 ${
+                      (currency === "ARS" ? bal.ars : bal.usd) >= 0 ? "text-primary" : "text-destructive"
+                    }`}>
+                      {formatCurrency(currency === "ARS" ? bal.ars : bal.usd, currency)}
+                    </p>
+                  </div>
+                  <div className="flex gap-1 shrink-0">
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={() => openEdit(account)}>
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => handleDelete(account)}>
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
                 </div>
-              );
-            })}
+                {i < visibleAccounts.length - 1 && <Separator />}
+              </div>
+            ))}
           </div>
         )}
 
