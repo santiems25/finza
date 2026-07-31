@@ -43,9 +43,9 @@ interface PeriodSummary {
   cards: CardBillingEntry[];
 }
 
-// Paleta tierra/pastel validada (ver skill dataviz) — orden fijo, no cíclico
-const DONUT_COLORS = ["#b5502e", "#c9a92e", "#2d7a3a", "#8a4a9e", "#a83d3d"];
-const DONUT_OTHER_COLOR = "#9c9a92";
+// Misma paleta que el donut de Portafolio (inversiones)
+const DONUT_COLORS = ["#60a5fa", "#a78bfa", "#34d399", "#fbbf24", "#f87171"];
+const DONUT_OTHER_COLOR = "#9ca3af";
 const MOVEMENTS_PAGE_SIZE = 8;
 
 export function DashboardContent() {
