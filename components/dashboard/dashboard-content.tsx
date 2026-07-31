@@ -11,19 +11,23 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import {
   getCreditCards, getExpenses, getIncomes, deleteIncome,
   getBillingPayments, markBillingAsPaid, unmarkBillingAsPaid,
   getCustomCategories, getMonthlyConfigs, getAccounts,
 } from "@/lib/supabase";
-import { formatCurrency, getMonthName, getCategoryMeta, getDueDate } from "@/lib/utils";
+import { formatCurrency, formatDate, getMonthName, getCategoryMeta, getDueDate } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { IncomeForm } from "./income-form";
 import { ExpenseForm } from "@/components/gastos/expense-form";
+import { FinzaLogo } from "@/components/layout/finza-logo";
 import type {
   CreditCard as CreditCardType, CreditCardMonthlyConfig, Expense, Income, BillingPayment,
   ExpenseCustomCategory, Account,
 } from "@/types";
-import { INCOME_SOURCE_ICONS, INCOME_SOURCE_LABELS } from "@/types";
+import { INCOME_SOURCE_ICONS, INCOME_SOURCE_LABELS, PAYMENT_METHOD_LABELS, PAYMENT_METHOD_ICONS } from "@/types";
 
 interface CardBillingEntry {
   card: CreditCardType;
@@ -51,7 +55,8 @@ export function DashboardContent() {
   const [movementType, setMovementType] = useState<"gasto" | "ingreso">("gasto");
   const [summaryCurrency, setSummaryCurrency] = useState<"ARS" | "USD">("ARS");
   const [billingCollapsedOpen, setBillingCollapsedOpen] = useState(false);
-  const [collapsedCards, setCollapsedCards] = useState<Set<string>>(new Set());
+  const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
+  const [movementFilter, setMovementFilter] = useState<string>("all");
 
   const [expenses,        setExpenses]        = useState<Expense[]>([]);
   const [incomes,         setIncomes]         = useState<Income[]>([]);
@@ -136,8 +141,8 @@ export function DashboardContent() {
     }
   };
 
-  const toggleCardCollapsed = (key: string) => {
-    setCollapsedCards(prev => {
+  const toggleCardExpanded = (key: string) => {
+    setExpandedCards(prev => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key); else next.add(key);
       return next;
@@ -149,10 +154,14 @@ export function DashboardContent() {
     | { kind: "expense"; id: string; date: string; data: Expense }
     | { kind: "income";  id: string; date: string; data: Income };
 
-  const movements: Movement[] = [
+  const allMovements: Movement[] = [
     ...monthExpenses.map(e => ({ kind: "expense" as const, id: e.id, date: e.date, data: e })),
     ...monthIncomes.map(i => ({ kind: "income" as const, id: i.id, date: i.date, data: i })),
   ].sort((a, b) => b.date.localeCompare(a.date));
+
+  const movements = movementFilter === "all"
+    ? allMovements
+    : allMovements.filter(m => m.kind === "expense" && m.data.category === movementFilter);
 
   const handleDeleteIncome = async (id: string) => {
     await deleteIncome(id);
@@ -168,7 +177,19 @@ export function DashboardContent() {
   return (
     <div className="space-y-5">
 
-      {/* ── Header: mes + botón agregar ── */}
+      {/* ── Header: logo + botón agregar ── */}
+      <div className="flex items-center justify-between">
+        <FinzaLogo size="md" />
+        <Button
+          size="icon"
+          className="h-11 w-11 rounded-full bg-[#2d5016] hover:bg-[#3a6b1d] border-0"
+          onClick={() => setMovementOpen(true)}
+        >
+          <Plus className="h-5 w-5" />
+        </Button>
+      </div>
+
+      {/* ── Selector de mes ── */}
       <div className="flex items-center justify-between">
         <Button variant="ghost" size="icon" onClick={prevMonth} className="h-8 w-8">
           <ChevronLeft className="h-4 w-4" />
@@ -179,18 +200,9 @@ export function DashboardContent() {
             <span className="text-[10px] text-primary font-medium">Mes actual</span>
           )}
         </div>
-        <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon" onClick={nextMonth} className="h-8 w-8">
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-          <Button
-            size="icon"
-            className="h-8 w-8 rounded-full bg-[#2d5016] hover:bg-[#3a6b1d] border-0 -mr-1"
-            onClick={() => setMovementOpen(true)}
-          >
-            <Plus className="h-4 w-4" />
-          </Button>
-        </div>
+        <Button variant="ghost" size="icon" onClick={nextMonth} className="h-8 w-8">
+          <ChevronRight className="h-4 w-4" />
+        </Button>
       </div>
 
       {/* ── Dashboard resumen ── */}
@@ -220,8 +232,8 @@ export function DashboardContent() {
                     summary={summary}
                     monthlyConfigs={monthlyConfigs}
                     customCategories={customCategories}
-                    expanded={!collapsedCards.has(key)}
-                    onToggleExpanded={() => toggleCardCollapsed(key)}
+                    expanded={expandedCards.has(key)}
+                    onToggleExpanded={() => toggleCardExpanded(key)}
                     onTogglePaid={() => handleTogglePaid(entry, summary)}
                   />
                 );
@@ -235,8 +247,8 @@ export function DashboardContent() {
                     summary={summary}
                     monthlyConfigs={monthlyConfigs}
                     customCategories={customCategories}
-                    expanded={collapsedCards.has(key)}
-                    onToggleExpanded={() => toggleCardCollapsed(key)}
+                    expanded={expandedCards.has(key)}
+                    onToggleExpanded={() => toggleCardExpanded(key)}
                     onTogglePaid={() => handleTogglePaid(entry, summary)}
                   />
                 );
@@ -267,8 +279,8 @@ export function DashboardContent() {
                         summary={summary}
                         monthlyConfigs={monthlyConfigs}
                         customCategories={customCategories}
-                        expanded={collapsedCards.has(key)}
-                        onToggleExpanded={() => toggleCardCollapsed(key)}
+                        expanded={expandedCards.has(key)}
+                        onToggleExpanded={() => toggleCardExpanded(key)}
                         onTogglePaid={() => handleTogglePaid(entry, summary)}
                       />
                     );
@@ -282,13 +294,32 @@ export function DashboardContent() {
 
       {/* ── Movimientos ── */}
       <div className="space-y-2.5">
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-          Movimientos
-        </p>
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            Movimientos
+          </p>
+          {customCategories.length > 0 && (
+            <Select value={movementFilter} onValueChange={setMovementFilter}>
+              <SelectTrigger className="h-7 w-auto gap-1.5 text-xs border-0 bg-muted px-2.5">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent align="end">
+                <SelectItem value="all">Todas las categorías</SelectItem>
+                {customCategories.map(cat => (
+                  <SelectItem key={cat.id} value={`custom_${cat.id}`}>
+                    {cat.icon} {cat.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
         {movements.length === 0 ? (
           <div className="text-center py-10 text-muted-foreground">
             <Wallet className="h-10 w-10 mx-auto mb-3 opacity-20" />
-            <p className="text-sm">Sin movimientos en {getMonthName(viewMonth)}</p>
+            <p className="text-sm">
+              {movementFilter === "all" ? `Sin movimientos en ${getMonthName(viewMonth)}` : "Sin movimientos en esta categoría"}
+            </p>
           </div>
         ) : (
           <Card className="rounded-2xl border-border/50 shadow-none">
@@ -474,6 +505,12 @@ function ExpenseRow({
         <p className="text-sm font-medium truncate">{expense.description}</p>
         <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
           <span className={`text-[10px] font-medium ${text}`}>{label}</span>
+          <span className="text-[10px] text-muted-foreground">
+            · {formatDate(expense.date)}
+          </span>
+          <span className="text-[10px] text-muted-foreground">
+            · {PAYMENT_METHOD_ICONS[expense.payment_method]} {PAYMENT_METHOD_LABELS[expense.payment_method]}
+          </span>
           {expense.total_installments > 1 && (
             <span className="text-[10px] text-muted-foreground">
               · {expense.installment_number}/{expense.total_installments}
@@ -502,7 +539,10 @@ function IncomeRow({
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium truncate">{income.description}</p>
-        <span className="text-[10px] text-muted-foreground">{INCOME_SOURCE_LABELS[income.source]}</span>
+        <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+          <span className="text-[10px] text-muted-foreground">{INCOME_SOURCE_LABELS[income.source]}</span>
+          <span className="text-[10px] text-muted-foreground">· {formatDate(income.date)}</span>
+        </div>
       </div>
       <span className="text-sm font-semibold shrink-0 text-emerald-500">
         +{formatCurrency(income.amount, income.currency)}

@@ -1,14 +1,10 @@
 import { Suspense } from "react";
 import { DashboardContent } from "@/components/dashboard/dashboard-content";
 import { Skeleton } from "@/components/ui/skeleton";
-import { FinzaLogo } from "@/components/layout/finza-logo";
 
 export default function DashboardPage() {
   return (
     <div className="px-4 pt-6 pb-2">
-      <div className="mb-6">
-        <FinzaLogo size="md" withSlogan />
-      </div>
       <Suspense fallback={<DashboardSkeleton />}>
         <DashboardContent />
       </Suspense>
