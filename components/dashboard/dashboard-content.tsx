@@ -23,6 +23,7 @@ import { useToast } from "@/hooks/use-toast";
 import { IncomeForm } from "./income-form";
 import { ExpenseForm } from "@/components/gastos/expense-form";
 import { FinzaLogo } from "@/components/layout/finza-logo";
+import { MOVEMENT_SAVED_EVENT } from "@/components/layout/quick-add-movement";
 import type {
   CreditCard as CreditCardType, CreditCardMonthlyConfig, Expense, Income, BillingPayment,
   ExpenseCustomCategory, Account,
@@ -87,6 +88,11 @@ export function DashboardContent() {
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { setMovementsExpanded(false); }, [viewMonth, viewYear, categoryFilter]);
+  useEffect(() => {
+    const onExternalSave = () => load();
+    window.addEventListener(MOVEMENT_SAVED_EVENT, onExternalSave);
+    return () => window.removeEventListener(MOVEMENT_SAVED_EVENT, onExternalSave);
+  }, [load]);
 
   // ── Navegación mes ──────────────────────────────────────────────────────────
   const prevMonth = () => {
@@ -197,11 +203,10 @@ export function DashboardContent() {
       <div className="flex items-center justify-between">
         <FinzaLogo size="md" />
         <Button
-          size="icon"
-          className="h-11 w-11 rounded-full bg-[#2d5016] hover:bg-[#3a6b1d] border-0"
+          className="h-9 rounded-xl gap-1.5 bg-[#2d5016] hover:bg-[#3a6b1d] border-0 text-xs font-medium px-3"
           onClick={() => setMovementOpen(true)}
         >
-          <Plus className="h-5 w-5" />
+          <Plus className="h-4 w-4" /> Nuevo movimiento
         </Button>
       </div>
 

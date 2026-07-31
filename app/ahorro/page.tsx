@@ -16,6 +16,7 @@ import type {
 } from "@/types";
 import type { BalanceData } from "@/lib/balances";
 import { Separator } from "@/components/ui/separator";
+import { MOVEMENT_SAVED_EVENT } from "@/components/layout/quick-add-movement";
 
 export default function AhorroPage() {
   const [expenses, setExpenses]           = useState<Expense[]>([]);
@@ -48,6 +49,11 @@ export default function AhorroPage() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    const onExternalSave = () => load();
+    window.addEventListener(MOVEMENT_SAVED_EVENT, onExternalSave);
+    return () => window.removeEventListener(MOVEMENT_SAVED_EVENT, onExternalSave);
+  }, [load]);
 
   const data: BalanceData = {
     expenses,
