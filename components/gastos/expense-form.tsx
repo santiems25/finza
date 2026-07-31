@@ -1,13 +1,16 @@
 "use client";
 
 import { useState } from "react";
+import { Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from "@/components/ui/select";
-import { addExpenses } from "@/lib/supabase";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { CategoriesManager } from "@/components/gastos/categories-manager";
+import { addExpenses, upsertCustomCategory, deleteCustomCategory } from "@/lib/supabase";
 import { getBillingPeriodForCard, getMonthName, parseAmount } from "@/lib/utils";
 import type {
   CreditCard, CreditCardMonthlyConfig, Currency, PaymentMethod, Account,
@@ -19,6 +22,7 @@ interface Props {
   monthlyConfigs: CreditCardMonthlyConfig[];
   accounts: Account[];
   customCategories: ExpenseCustomCategory[];
+  onCategoriesChanged: () => void;
   onSaved: () => void;
 }
 
@@ -33,8 +37,9 @@ function addMonths(dateStr: string, months: number): string {
 }
 
 
-export function ExpenseForm({ cards, monthlyConfigs, accounts, customCategories, onSaved }: Props) {
+export function ExpenseForm({ cards, monthlyConfigs, accounts, customCategories, onCategoriesChanged, onSaved }: Props) {
   const [saving, setSaving] = useState(false);
+  const [categoriesOpen, setCategoriesOpen] = useState(false);
   const [form, setForm] = useState({
     amount: "",
     currency: "ARS" as Currency,
@@ -175,7 +180,16 @@ export function ExpenseForm({ cards, monthlyConfigs, accounts, customCategories,
 
       {/* Categoría */}
       <div>
-        <Label className="text-xs mb-1.5 block">Categoría</Label>
+        <div className="flex items-center justify-between mb-1.5">
+          <Label className="text-xs">Categoría</Label>
+          <button
+            type="button"
+            onClick={() => setCategoriesOpen(true)}
+            className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <Settings className="h-3 w-3" /> Gestionar
+          </button>
+        </div>
         {customCategories.length === 0 ? (
           <p className="text-xs text-muted-foreground rounded-lg border border-dashed px-3 py-2.5">
             No tenés categorías. Creá una en la solapa <strong>Categorías</strong>.
@@ -340,6 +354,20 @@ export function ExpenseForm({ cards, monthlyConfigs, accounts, customCategories,
       <Button type="submit" className="w-full" disabled={saving}>
         {saving ? "Guardando..." : "Guardar gasto"}
       </Button>
+
+      {/* Dialog gestión de categorías */}
+      <Dialog open={categoriesOpen} onOpenChange={setCategoriesOpen}>
+        <DialogContent className="max-w-sm mx-auto max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Categorías</DialogTitle>
+          </DialogHeader>
+          <CategoriesManager
+            categories={customCategories}
+            onUpsert={async (cat) => { await upsertCustomCategory(cat); onCategoriesChanged(); }}
+            onDelete={async (id) => { await deleteCustomCategory(id); onCategoriesChanged(); }}
+          />
+        </DialogContent>
+      </Dialog>
     </form>
   );
 }

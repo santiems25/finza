@@ -120,6 +120,7 @@ export default function GastosPage() {
               monthlyConfigs={monthlyConfigs}
               accounts={accounts}
               customCategories={customCategories}
+              onCategoriesChanged={load}
               onSaved={handleSaved}
             />
           </DialogContent>

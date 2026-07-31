@@ -403,6 +403,7 @@ export function DashboardContent() {
               monthlyConfigs={monthlyConfigs}
               accounts={accounts}
               customCategories={customCategories}
+              onCategoriesChanged={load}
               onSaved={() => { setMovementOpen(false); load(); toast({ title: "✅ Gasto guardado" }); }}
             />
           ) : (
