@@ -208,7 +208,7 @@ export default function InversionesPage() {
 
           {/* ── Composición del portafolio ── */}
           {positions.length > 0 && (
-            <Card>
+            <Card className="rounded-2xl border-border/50 shadow-none">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-semibold">Composición</CardTitle>
               </CardHeader>
@@ -323,32 +323,37 @@ function PortfolioDashboard({
   const isUp = unrealizedPnL >= 0;
 
   return (
-    <Card className={isUp ? "border-emerald-500/20" : "border-destructive/20"}>
-      <CardContent className="p-4 space-y-4">
-        {/* Valor invertido vs actual */}
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Invertido</p>
-            <p className="text-xl font-bold">{formatCurrency(totalCost, "USD")}</p>
-          </div>
-          <div>
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Valor actual</p>
-            <p className="text-xl font-bold">{formatCurrency(totalValue, "USD")}</p>
+    <Card className={`rounded-2xl shadow-none ${isUp ? "border-emerald-500/20" : "border-destructive/20"}`}>
+      <CardContent className="p-5 space-y-4">
+        {/* P&L no realizado — cifra protagonista */}
+        <div>
+          <p className="text-[11px] text-muted-foreground uppercase tracking-wider font-medium mb-1">
+            No realizado
+          </p>
+          <div className="flex items-baseline gap-2 flex-wrap">
+            <span
+              className={`text-[2.25rem] leading-tight font-bold tracking-tight ${isUp ? "text-emerald-500" : "text-destructive"}`}
+              style={{ fontFamily: "ui-rounded, 'SF Pro Rounded', system-ui, sans-serif" }}
+            >
+              {isUp ? "+" : ""}{formatCurrency(unrealizedPnL, "USD")}
+            </span>
+            <span className={`text-sm font-medium ${isUp ? "text-emerald-500" : "text-destructive"}`}>
+              ({isUp ? "+" : ""}{unrealizedPnLPct.toFixed(2)}%)
+            </span>
           </div>
         </div>
 
         <Separator />
 
-        {/* P&L no realizado */}
-        <div>
-          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5">No realizado</p>
-          <div className="flex items-baseline gap-2">
-            <span className={`text-2xl font-bold ${isUp ? "text-emerald-400" : "text-destructive"}`}>
-              {isUp ? "+" : ""}{formatCurrency(unrealizedPnL, "USD")}
-            </span>
-            <span className={`text-sm font-medium ${isUp ? "text-emerald-400" : "text-destructive"}`}>
-              ({isUp ? "+" : ""}{unrealizedPnLPct.toFixed(2)}%)
-            </span>
+        {/* Valor invertido vs actual */}
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <p className="text-[11px] text-muted-foreground uppercase tracking-wider font-medium mb-1">Invertido</p>
+            <p className="text-xl font-bold">{formatCurrency(totalCost, "USD")}</p>
+          </div>
+          <div>
+            <p className="text-[11px] text-muted-foreground uppercase tracking-wider font-medium mb-1">Valor actual</p>
+            <p className="text-xl font-bold">{formatCurrency(totalValue, "USD")}</p>
           </div>
         </div>
 
@@ -357,7 +362,7 @@ function PortfolioDashboard({
           {soldCount > 0 && (
             <div className="rounded-lg bg-muted/40 px-3 py-2">
               <p className="text-[10px] text-muted-foreground mb-0.5">Realizado</p>
-              <p className={`text-sm font-semibold ${realizedPnL >= 0 ? "text-emerald-400" : "text-destructive"}`}>
+              <p className={`text-sm font-semibold ${realizedPnL >= 0 ? "text-emerald-500" : "text-destructive"}`}>
                 {realizedPnL >= 0 ? "+" : ""}{formatCurrency(realizedPnL, "USD")}
               </p>
             </div>
@@ -365,7 +370,7 @@ function PortfolioDashboard({
           {totalDividends > 0 && (
             <div className="rounded-lg bg-muted/40 px-3 py-2">
               <p className="text-[10px] text-muted-foreground mb-0.5">Dividendos</p>
-              <p className="text-sm font-semibold text-emerald-400">
+              <p className="text-sm font-semibold text-emerald-500">
                 +{formatCurrency(totalDividends, "USD")}
               </p>
             </div>
@@ -375,11 +380,11 @@ function PortfolioDashboard({
               <p className="text-[10px] text-muted-foreground mb-0.5 flex items-center gap-1">
                 vs SPY
                 {portfolioBeatsSpy
-                  ? <span className="text-emerald-400">↑</span>
+                  ? <span className="text-emerald-500">↑</span>
                   : <span className="text-destructive">↓</span>}
               </p>
               <div className="flex items-center gap-1.5 flex-wrap">
-                <span className={`text-sm font-semibold ${portfolioBeatsSpy ? "text-emerald-400" : "text-destructive"}`}>
+                <span className={`text-sm font-semibold ${portfolioBeatsSpy ? "text-emerald-500" : "text-destructive"}`}>
                   {unrealizedPnLPct.toFixed(1)}%
                 </span>
                 <span className="text-[10px] text-muted-foreground">
@@ -391,7 +396,7 @@ function PortfolioDashboard({
           {(soldCount > 0 || totalDividends > 0) && (
             <div className="rounded-lg bg-primary/10 border border-primary/20 px-3 py-2 col-span-2">
               <p className="text-[10px] text-muted-foreground mb-0.5">Total (no real. + real. + dividendos)</p>
-              <p className={`text-sm font-semibold ${totalPnL >= 0 ? "text-emerald-400" : "text-destructive"}`}>
+              <p className={`text-sm font-semibold ${totalPnL >= 0 ? "text-emerald-500" : "text-destructive"}`}>
                 {totalPnL >= 0 ? "+" : ""}{formatCurrency(totalPnL, "USD")}
               </p>
             </div>
@@ -416,7 +421,7 @@ function PositionCard({
   const hasPrice = pos.currentPrice != null;
 
   return (
-    <Card>
+    <Card className="rounded-2xl border-border/50 shadow-none">
       <CardContent className="p-4">
         {/* Header de posición — tap para expandir lotes */}
         <div
@@ -571,7 +576,7 @@ function LotRow({
 function SoldCard({ lot, onDelete }: { lot: SoldLot; onDelete: (id: string) => void }) {
   const isUp = lot.realizedPnL >= 0;
   return (
-    <Card className="opacity-70">
+    <Card className="rounded-2xl border-border/50 shadow-none opacity-70">
       <CardContent className="p-4">
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
