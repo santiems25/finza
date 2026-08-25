@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,6 +10,7 @@ import {
 } from "@/components/ui/select";
 import { addInvestment, addFxTransaction } from "@/lib/supabase";
 import { formatCurrency, parseAmount, parseQuantity } from "@/lib/utils";
+import { fetchMepRate } from "@/lib/mep";
 import type { AssetType } from "@/types";
 import { ASSET_TYPE_LABELS } from "@/types";
 
@@ -24,6 +26,7 @@ export function InvestmentForm({ investmentAccountId, availableArs, onSaved }: P
   const [saving, setSaving] = useState(false);
   const [payWithArs, setPayWithArs] = useState(false);
   const [exchangeRate, setExchangeRate] = useState("");
+  const [loadingMep, setLoadingMep] = useState(false);
   const [form, setForm] = useState({
     ticker:     "",
     asset_type: "accion" as AssetType,
@@ -47,6 +50,21 @@ export function InvestmentForm({ investmentAccountId, availableArs, onSaved }: P
   const rate    = parseAmount(exchangeRate);
   const arsCost = rate > 0 ? cost * rate : 0;
   const notEnoughArs = payWithArs && arsCost > availableArs;
+
+  const loadMepRate = async () => {
+    setLoadingMep(true);
+    try {
+      const mep = await fetchMepRate();
+      if (mep) setExchangeRate(mep.toFixed(2));
+    } finally {
+      setLoadingMep(false);
+    }
+  };
+
+  const handleTogglePayWithArs = (checked: boolean) => {
+    setPayWithArs(checked);
+    if (checked && !exchangeRate) loadMepRate();
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -176,20 +194,31 @@ export function InvestmentForm({ investmentAccountId, availableArs, onSaved }: P
             <input
               type="checkbox"
               checked={payWithArs}
-              onChange={e => setPayWithArs(e.target.checked)}
+              onChange={e => handleTogglePayWithArs(e.target.checked)}
               className="mt-0.5 h-4 w-4 accent-[#2d5016]"
             />
             <span>
               <span className="text-xs font-medium block">Pagar con pesos disponibles</span>
               <span className="text-[11px] text-muted-foreground">
-                Convierte pesos de tu cuenta de Inversiones a dólares con la cotización que ingreses
+                Convierte pesos de tu cuenta de Inversiones a dólares con la cotización del MEP
               </span>
             </span>
           </label>
 
           {payWithArs && (
             <div>
-              <Label className="text-xs mb-1.5 block">Cotización ($ por USD)</Label>
+              <div className="flex items-center justify-between mb-1.5">
+                <Label className="text-xs">Cotización ($ por USD)</Label>
+                <button
+                  type="button"
+                  onClick={loadMepRate}
+                  disabled={loadingMep}
+                  className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <RefreshCw className={`h-3 w-3 ${loadingMep ? "animate-spin" : ""}`} />
+                  {loadingMep ? "Buscando MEP..." : "Actualizar MEP"}
+                </button>
+              </div>
               <Input
                 type="text"
                 placeholder="1150"

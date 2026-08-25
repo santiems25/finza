@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { ArrowDownToLine } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ArrowDownToLine, RefreshCw } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { formatCurrency, parseAmount } from "@/lib/utils";
+import { fetchMepRate } from "@/lib/mep";
 import type { Account, AccountTransfer, Currency } from "@/types";
 
 interface Props {
@@ -25,6 +26,24 @@ export function InvestmentAccountCard({
   sourceAccounts, investmentAccountId, cashArs, cashUsd, onAddTransfer,
 }: Props) {
   const [open, setOpen] = useState(false);
+  const [mepRate, setMepRate] = useState<number | null>(null);
+  const [loadingMep, setLoadingMep] = useState(false);
+
+  const loadMep = async () => {
+    setLoadingMep(true);
+    try {
+      setMepRate(await fetchMepRate());
+    } finally {
+      setLoadingMep(false);
+    }
+  };
+
+  useEffect(() => { loadMep(); }, []);
+
+  // Todo el "valor en moneda" expresado en dólares (los pesos se dolarizan
+  // al MEP), para poder compararlo de una con el resto del portafolio.
+  const cashArsInUsd = mepRate ? cashArs / mepRate : null;
+  const totalUsd = cashUsd + (cashArsInUsd ?? 0);
 
   return (
     <Card className="rounded-2xl border-border/50 shadow-none">
@@ -39,11 +58,26 @@ export function InvestmentAccountCard({
             </Button>
           )}
         </div>
-        <div className="flex items-baseline gap-4 flex-wrap">
-          <p className="text-xl font-bold">{formatCurrency(cashUsd, "USD")}</p>
+        <p className="text-xl font-bold">{formatCurrency(totalUsd, "USD")}</p>
+        <div className="flex items-center gap-2 flex-wrap text-[10px] text-muted-foreground">
+          <span>{formatCurrency(cashUsd, "USD")} propios</span>
           {cashArs !== 0 && (
-            <p className="text-sm font-medium text-muted-foreground">{formatCurrency(cashArs, "ARS")}</p>
+            <>
+              <span>+</span>
+              <span>
+                {formatCurrency(cashArs, "ARS")}
+                {mepRate ? ` (dolarizado al MEP $${mepRate.toFixed(0)})` : " (sin cotización MEP)"}
+              </span>
+            </>
           )}
+          <button
+            type="button"
+            onClick={loadMep}
+            disabled={loadingMep}
+            className="flex items-center gap-1 hover:text-foreground transition-colors"
+          >
+            <RefreshCw className={`h-2.5 w-2.5 ${loadingMep ? "animate-spin" : ""}`} />
+          </button>
         </div>
         <p className="text-[10px] text-muted-foreground">
           Plata disponible en tu cuenta de Inversiones sin invertir todavía
