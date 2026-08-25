@@ -248,24 +248,24 @@ export default function InversionesPage() {
         </div>
       </div>
 
-      {/* ── Cuenta de Inversiones (siempre separada) ── */}
-      {investmentAccount && (
-        <div className="mb-4">
-          <InvestmentAccountCard
-            sourceAccounts={sourceAccounts}
-            investmentAccountId={investmentAccount.id}
-            cashArs={cashArs}
-            cashUsd={cashUsd}
-            onAddTransfer={async (t) => { await addTransfer(t); load(); }}
-          />
-        </div>
-      )}
-
       {investments.length === 0 ? (
-        <EmptyState onAdd={() => setOpen(true)} />
+        <>
+          <EmptyState onAdd={() => setOpen(true)} />
+          {investmentAccount && (
+            <div className="mt-4">
+              <InvestmentAccountCard
+                sourceAccounts={sourceAccounts}
+                investmentAccountId={investmentAccount.id}
+                cashArs={cashArs}
+                cashUsd={cashUsd}
+                onAddTransfer={async (t) => { await addTransfer(t); load(); }}
+              />
+            </div>
+          )}
+        </>
       ) : (
         <div className="space-y-4">
-          {/* ── Dashboard de métricas ── */}
+          {/* ── Dashboard de métricas (lo principal: rendimiento) ── */}
           <PortfolioDashboard
             totalCost={totalCost}
             totalValue={totalValue}
@@ -280,6 +280,17 @@ export default function InversionesPage() {
             activeCount={positions.length}
             soldCount={soldLots.length}
           />
+
+          {/* ── Cuenta de Inversiones (siempre separada) ── */}
+          {investmentAccount && (
+            <InvestmentAccountCard
+              sourceAccounts={sourceAccounts}
+              investmentAccountId={investmentAccount.id}
+              cashArs={cashArs}
+              cashUsd={cashUsd}
+              onAddTransfer={async (t) => { await addTransfer(t); load(); }}
+            />
+          )}
 
           {/* ── Composición del portafolio ── */}
           {positions.length > 0 && (

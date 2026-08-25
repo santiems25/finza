@@ -109,7 +109,14 @@ export function DashboardContent() {
   const isCurrentMonth = viewMonth === now.getMonth() && viewYear === now.getFullYear();
 
   // ── Gastos / ingresos del mes ────────────────────────────────────────────────
+  // Los gastos con tarjeta se agrupan por el mes del RESUMEN al que
+  // pertenecen (billing_month/billing_year), no por la fecha de la compra
+  // — así un gasto de fin de agosto que cae en el resumen de septiembre
+  // aparece en septiembre, no en agosto.
   const monthExpenses = expenses.filter(e => {
+    if (e.payment_method === "credito" && e.billing_month != null && e.billing_year != null) {
+      return e.billing_month === viewMonth && e.billing_year === viewYear;
+    }
     const d = new Date(e.date + "T00:00:00");
     return d.getMonth() === viewMonth && d.getFullYear() === viewYear;
   });
