@@ -50,11 +50,21 @@ export function parseQuantity(v: string): number | null {
   return isNaN(n) ? null : n;
 }
 
-export function formatCurrency(amount: number, currency: "ARS" | "USD"): string {
+/**
+ * Formatea un monto. Los USD se muestran como número entero salvo que se
+ * pida `decimals: true` (solo se usa en el resumen de tarjeta, donde sí
+ * importa ver los centavos exactos).
+ */
+export function formatCurrency(
+  amount: number,
+  currency: "ARS" | "USD",
+  decimals = false
+): string {
   if (currency === "USD") {
     const number = new Intl.NumberFormat("en-US", {
       style: "decimal",
-      minimumFractionDigits: 2,
+      minimumFractionDigits: decimals ? 2 : 0,
+      maximumFractionDigits: decimals ? 2 : 0,
     }).format(Math.abs(amount));
     return `${amount < 0 ? "-" : ""}U$D ${number}`;
   }

@@ -867,7 +867,7 @@ function BillingCard({
             </div>
             <div className="flex items-baseline gap-3">
               {entry.totalARS > 0 && <span className="text-lg font-bold">{formatCurrency(entry.totalARS, "ARS")}</span>}
-              {entry.totalUSD > 0 && <span className="text-sm font-semibold text-emerald-500">{formatCurrency(entry.totalUSD, "USD")}</span>}
+              {entry.totalUSD > 0 && <span className="text-sm font-semibold text-emerald-500">{formatCurrency(entry.totalUSD, "USD", true)}</span>}
               <span className="text-xs text-muted-foreground">
                 · {entry.expenses.length} compra{entry.expenses.length !== 1 ? "s" : ""}
               </span>
@@ -903,7 +903,7 @@ function BillingCard({
                     <span className="text-[10px] text-muted-foreground">{meta.label}</span>
                   </div>
                   <span className="text-xs font-semibold shrink-0">
-                    {formatCurrency(expense.amount, expense.currency)}
+                    {formatCurrency(expense.amount, expense.currency, true)}
                   </span>
                 </div>
               );
