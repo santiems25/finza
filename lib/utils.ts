@@ -52,11 +52,11 @@ export function parseQuantity(v: string): number | null {
 
 export function formatCurrency(amount: number, currency: "ARS" | "USD"): string {
   if (currency === "USD") {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
+    const number = new Intl.NumberFormat("en-US", {
+      style: "decimal",
       minimumFractionDigits: 2,
-    }).format(amount);
+    }).format(Math.abs(amount));
+    return `${amount < 0 ? "-" : ""}U$D ${number}`;
   }
   return new Intl.NumberFormat("es-AR", {
     style: "currency",
