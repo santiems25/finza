@@ -26,7 +26,7 @@ export interface Account {
   id: string;
   name: string;
   currency: Currency;
-  account_type: "bank" | "wallet" | "cash";
+  account_type: "bank" | "wallet" | "cash" | "investment";
   initial_ars: number;
   initial_usd: number;
   created_at: string;

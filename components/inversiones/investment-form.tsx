@@ -7,19 +7,23 @@ import { Label } from "@/components/ui/label";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { addInvestment } from "@/lib/supabase";
+import { addInvestment, addFxTransaction } from "@/lib/supabase";
 import { formatCurrency, parseAmount, parseQuantity } from "@/lib/utils";
 import type { AssetType } from "@/types";
 import { ASSET_TYPE_LABELS } from "@/types";
 
 interface Props {
+  investmentAccountId: string | null;
+  availableArs: number;
   onSaved: () => void;
 }
 
 const today = new Date().toISOString().split("T")[0];
 
-export function InvestmentForm({ onSaved }: Props) {
+export function InvestmentForm({ investmentAccountId, availableArs, onSaved }: Props) {
   const [saving, setSaving] = useState(false);
+  const [payWithArs, setPayWithArs] = useState(false);
+  const [exchangeRate, setExchangeRate] = useState("");
   const [form, setForm] = useState({
     ticker:     "",
     asset_type: "accion" as AssetType,
@@ -40,12 +44,29 @@ export function InvestmentForm({ onSaved }: Props) {
     ? resolvedQty.toFixed(6).replace(/\.?0+$/, "")
     : null;
 
+  const rate    = parseAmount(exchangeRate);
+  const arsCost = rate > 0 ? cost * rate : 0;
+  const notEnoughArs = payWithArs && arsCost > availableArs;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.ticker || !form.quantity || !form.buy_price) return;
     if (resolvedQty == null || resolvedQty <= 0) return;
+    if (payWithArs && (!investmentAccountId || rate <= 0)) return;
     setSaving(true);
     try {
+      if (payWithArs && investmentAccountId) {
+        // Conversión interna pesos→dólares dentro de la cuenta de inversiones
+        // (no se muestra en el historial de compras de dólares de Ahorro)
+        await addFxTransaction({
+          ars_amount:    arsCost,
+          usd_amount:    cost,
+          exchange_rate: rate,
+          date:          form.buy_date,
+          notes:         null,
+          account_id:    investmentAccountId,
+        });
+      }
       await addInvestment({
         ticker:     form.ticker.toUpperCase().trim(),
         asset_type: form.asset_type,
@@ -148,7 +169,55 @@ export function InvestmentForm({ onSaved }: Props) {
         </div>
       )}
 
-      <Button type="submit" className="w-full" disabled={saving}>
+      {/* Pagar con pesos disponibles */}
+      {investmentAccountId && (
+        <div className="space-y-2">
+          <label className="flex items-start gap-2.5 rounded-lg bg-muted/40 px-3 py-2.5 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={payWithArs}
+              onChange={e => setPayWithArs(e.target.checked)}
+              className="mt-0.5 h-4 w-4 accent-[#2d5016]"
+            />
+            <span>
+              <span className="text-xs font-medium block">Pagar con pesos disponibles</span>
+              <span className="text-[11px] text-muted-foreground">
+                Convierte pesos de tu cuenta de Inversiones a dólares con la cotización que ingreses
+              </span>
+            </span>
+          </label>
+
+          {payWithArs && (
+            <div>
+              <Label className="text-xs mb-1.5 block">Cotización ($ por USD)</Label>
+              <Input
+                type="text"
+                placeholder="1150"
+                value={exchangeRate}
+                onChange={e => setExchangeRate(e.target.value)}
+                inputMode="decimal"
+              />
+              {rate > 0 && (
+                <div className={`rounded-lg px-3 py-2.5 mt-2 flex items-center justify-between ${
+                  notEnoughArs ? "bg-destructive/10 border border-destructive/20" : "bg-emerald-500/10 border border-emerald-500/20"
+                }`}>
+                  <span className="text-xs text-muted-foreground">Se descuentan</span>
+                  <span className={`text-sm font-semibold ${notEnoughArs ? "text-destructive" : ""}`}>
+                    {formatCurrency(arsCost, "ARS")}
+                  </span>
+                </div>
+              )}
+              {notEnoughArs && (
+                <p className="text-[10px] text-destructive mt-1">
+                  Disponible: {formatCurrency(availableArs, "ARS")}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      <Button type="submit" className="w-full" disabled={saving || (payWithArs && (rate <= 0))}>
         {saving ? "Guardando..." : "Registrar compra"}
       </Button>
     </form>

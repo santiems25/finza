@@ -382,6 +382,14 @@ export async function sellInvestment(
   if (error) throw error;
 }
 
+export async function updateInvestmentQuantity(id: string, quantity: number): Promise<void> {
+  const { error } = await supabase
+    .from("investments")
+    .update({ quantity })
+    .eq("id", id);
+  if (error) throw error;
+}
+
 export async function deleteInvestment(id: string) {
   const { error } = await supabase.from("investments").delete().eq("id", id);
   if (error) throw error;

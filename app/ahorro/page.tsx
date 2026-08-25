@@ -65,6 +65,14 @@ export default function AhorroPage() {
     transfers,
   };
 
+  // La cuenta de Inversiones queda siempre separada: no entra en el total
+  // ni en la lista de cuentas de Ahorro, ni en el historial de compra de USD.
+  const savingsAccounts = accounts.filter(a => a.account_type !== "investment");
+  const investmentAccountIds = new Set(
+    accounts.filter(a => a.account_type === "investment").map(a => a.id)
+  );
+  const savingsFxTxs = fxTxs.filter(tx => !tx.account_id || !investmentAccountIds.has(tx.account_id));
+
   if (loading) {
     return (
       <div className="px-4 pt-6 space-y-4">
@@ -88,7 +96,7 @@ export default function AhorroPage() {
       </div>
 
       <AccountsManager
-        accounts={accounts}
+        accounts={savingsAccounts}
         data={data}
         onUpsert={async (a) => { await upsertAccount(a); load(); }}
         onDelete={async (id) => { await deleteAccount(id); load(); }}
@@ -99,12 +107,12 @@ export default function AhorroPage() {
 
       <div className="space-y-3">
         <BuyDollarsButton
-          accounts={accounts}
+          accounts={savingsAccounts}
           onAddFx={async (tx) => { await addFxTransaction(tx); load(); }}
         />
         <DollarPurchaseHistory
-          accounts={accounts}
-          transactions={fxTxs}
+          accounts={savingsAccounts}
+          transactions={savingsFxTxs}
           onDeleteFx={async (id) => { await deleteFxTransaction(id); load(); }}
         />
       </div>

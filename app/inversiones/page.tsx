@@ -13,10 +13,17 @@ import { InvestmentForm } from "@/components/inversiones/investment-form";
 import { PortfolioChart } from "@/components/inversiones/portfolio-chart";
 import { SellDialog } from "@/components/inversiones/sell-dialog";
 import { DividendsSection } from "@/components/inversiones/dividends-section";
-import { getInvestments, deleteInvestment, getDividends } from "@/lib/supabase";
+import { InvestmentAccountCard } from "@/components/inversiones/investment-account-card";
+import {
+  getInvestments, deleteInvestment, getDividends,
+  getAccounts, upsertAccount, getTransfers, addTransfer,
+  getFxTransactions,
+} from "@/lib/supabase";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
-import type { Investment, Position, SoldLot, AssetType, Dividend } from "@/types";
+import type {
+  Investment, Position, SoldLot, AssetType, Dividend, Account, AccountTransfer, FxTransaction,
+} from "@/types";
 import { ASSET_TYPE_LABELS, ASSET_TYPE_COLORS } from "@/types";
 
 // ─── Tipos de filtro ──────────────────────────────────────────────────────────
@@ -78,9 +85,14 @@ export default function InversionesPage() {
   const [open, setOpen]               = useState(false);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("activas");
   const [assetFilter, setAssetFilter]   = useState<AssetType | "todas">("todas");
-  const [sellLot, setSellLot]           = useState<Investment | null>(null);
+  const [sellPosition, setSellPosition] = useState<Position | null>(null);
   const [dividends, setDividends]       = useState<Dividend[]>([]);
+  const [accounts, setAccounts]         = useState<Account[]>([]);
+  const [transfers, setTransfers]       = useState<AccountTransfer[]>([]);
+  const [fxTxs, setFxTxs]               = useState<FxTransaction[]>([]);
   const { toast } = useToast();
+
+  const investmentAccount = accounts.find(a => a.account_type === "investment") ?? null;
 
   const fetchPrices = useCallback(async (invs: Investment[]) => {
     const active = invs.filter(i => !i.is_sold);
@@ -95,9 +107,25 @@ export default function InversionesPage() {
   }, []);
 
   const load = useCallback(async () => {
-    const [inv, divs] = await Promise.all([getInvestments(), getDividends()]);
+    const [inv, divs, acc, trf, fx] = await Promise.all([
+      getInvestments(), getDividends(), getAccounts(), getTransfers(), getFxTransactions(),
+    ]);
     setInvestments(inv);
     setDividends(divs);
+    setTransfers(trf);
+    setFxTxs(fx);
+
+    // Auto-provisionar la cuenta de Inversiones si todavía no existe
+    let acc2 = acc;
+    if (!acc.some(a => a.account_type === "investment")) {
+      await upsertAccount({
+        name: "Inversiones", account_type: "investment", currency: "ARS",
+        initial_ars: 0, initial_usd: 0,
+      });
+      acc2 = await getAccounts();
+    }
+    setAccounts(acc2);
+
     await fetchPrices(inv);
     setLoading(false);
   }, [fetchPrices]);
@@ -114,7 +142,7 @@ export default function InversionesPage() {
   useEffect(() => { load(); }, [load]);
 
   const handleSaved  = () => { setOpen(false); load(); toast({ title: "✅ Compra registrada" }); };
-  const handleSold   = () => { setSellLot(null); load(); toast({ title: "✅ Venta registrada" }); };
+  const handleSold   = () => { setSellPosition(null); load(); toast({ title: "✅ Venta registrada" }); };
   const handleDelete = async (id: string) => {
     await deleteInvestment(id);
     load();
@@ -132,6 +160,32 @@ export default function InversionesPage() {
   const realizedPnL      = soldLots.reduce((s, l) => s + l.realizedPnL, 0);
   const totalDividends   = dividends.reduce((s, d) => s + d.amount, 0);
   const totalPnL         = unrealizedPnL + realizedPnL + totalDividends;
+
+  // ── Plata disponible en la cuenta de Inversiones (sin invertir) ────────────
+  const totalEverInvested = investments.reduce((s, i) => s + i.buy_price * i.quantity, 0);
+  const totalSaleProceeds = soldLots.reduce((s, l) => s + (l.sell_price ?? 0) * l.quantity, 0);
+
+  let cashArs = investmentAccount?.initial_ars ?? 0;
+  let cashUsd = investmentAccount?.initial_usd ?? 0;
+  if (investmentAccount) {
+    for (const t of transfers) {
+      if (t.to_account_id === investmentAccount.id) {
+        if (t.currency === "ARS") cashArs += t.amount; else cashUsd += t.amount;
+      }
+      if (t.from_account_id === investmentAccount.id) {
+        if (t.currency === "ARS") cashArs -= t.amount; else cashUsd -= t.amount;
+      }
+    }
+    for (const fx of fxTxs) {
+      if (fx.account_id === investmentAccount.id) {
+        cashArs -= fx.ars_amount;
+        cashUsd += fx.usd_amount;
+      }
+    }
+  }
+  cashUsd += totalSaleProceeds + totalDividends - totalEverInvested;
+
+  const sourceAccounts = accounts.filter(a => a.account_type !== "investment");
 
   // Benchmark SPY
   const spyPct = spyCurrent != null && spyStart != null && spyStart > 0
@@ -181,11 +235,28 @@ export default function InversionesPage() {
             </DialogTrigger>
             <DialogContent className="max-w-sm mx-auto max-h-[90vh] overflow-y-auto">
               <DialogHeader><DialogTitle>Registrar compra</DialogTitle></DialogHeader>
-              <InvestmentForm onSaved={handleSaved} />
+              <InvestmentForm
+                investmentAccountId={investmentAccount?.id ?? null}
+                availableArs={cashArs}
+                onSaved={handleSaved}
+              />
             </DialogContent>
           </Dialog>
         </div>
       </div>
+
+      {/* ── Cuenta de Inversiones (siempre separada) ── */}
+      {investmentAccount && (
+        <div className="mb-4">
+          <InvestmentAccountCard
+            sourceAccounts={sourceAccounts}
+            investmentAccountId={investmentAccount.id}
+            cashArs={cashArs}
+            cashUsd={cashUsd}
+            onAddTransfer={async (t) => { await addTransfer(t); load(); }}
+          />
+        </div>
+      )}
 
       {investments.length === 0 ? (
         <EmptyState onAdd={() => setOpen(true)} />
@@ -261,7 +332,7 @@ export default function InversionesPage() {
                   <PositionCard
                     key={`${pos.ticker}-${pos.asset_type}`}
                     position={pos}
-                    onSell={lot => setSellLot(lot)}
+                    onSell={() => setSellPosition(pos)}
                     onDelete={handleDelete}
                   />
                 ))
@@ -289,17 +360,17 @@ export default function InversionesPage() {
       )}
 
       {/* ── Sell dialog ── */}
-      <Dialog open={!!sellLot} onOpenChange={open => { if (!open) setSellLot(null); }}>
+      <Dialog open={!!sellPosition} onOpenChange={open => { if (!open) setSellPosition(null); }}>
         <DialogContent className="max-w-sm mx-auto">
           <DialogHeader>
-            <DialogTitle>Vender posición — {sellLot?.ticker}</DialogTitle>
+            <DialogTitle>Vender posición — {sellPosition?.ticker}</DialogTitle>
           </DialogHeader>
-          {sellLot && (
+          {sellPosition && (
             <SellDialog
-              lot={sellLot}
-              currentPrice={prices[sellLot.ticker.toUpperCase()] ?? null}
+              position={sellPosition}
+              currentPrice={prices[sellPosition.ticker.toUpperCase()] ?? null}
               onSold={handleSold}
-              onCancel={() => setSellLot(null)}
+              onCancel={() => setSellPosition(null)}
             />
           )}
         </DialogContent>
@@ -352,7 +423,7 @@ function PortfolioDashboard({
             <p className="text-xl font-bold">{formatCurrency(totalCost, "USD")}</p>
           </div>
           <div>
-            <p className="text-[11px] text-muted-foreground uppercase tracking-wider font-medium mb-1">Valor actual</p>
+            <p className="text-[11px] text-muted-foreground uppercase tracking-wider font-medium mb-1">Valor en activos</p>
             <p className="text-xl font-bold">{formatCurrency(totalValue, "USD")}</p>
           </div>
         </div>
@@ -413,7 +484,7 @@ function PositionCard({
   position: pos, onSell, onDelete,
 }: {
   position: Position;
-  onSell: (lot: Investment) => void;
+  onSell: () => void;
   onDelete: (id: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -493,17 +564,14 @@ function PositionCard({
               size="sm"
               variant="outline"
               className="h-7 text-xs"
-              onClick={() => {
-                if (pos.lots.length === 1) { onSell(pos.lots[0]); }
-                else setExpanded(e => !e);
-              }}
+              onClick={onSell}
             >
               Vender
             </Button>
           </div>
         </div>
 
-        {/* Lotes individuales (expandido) */}
+        {/* Lotes individuales (expandido, solo informativo) */}
         {expanded && pos.lots.length > 1 && (
           <div className="mt-3 pt-3 border-t border-border/50 space-y-2">
             <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Lotes individuales</p>
@@ -512,7 +580,6 @@ function PositionCard({
                 key={lot.id}
                 lot={lot}
                 currentPrice={pos.currentPrice}
-                onSell={() => onSell(lot)}
                 onDelete={() => onDelete(lot.id)}
               />
             ))}
@@ -539,11 +606,10 @@ function PositionCard({
 // ─── LotRow ───────────────────────────────────────────────────────────────────
 
 function LotRow({
-  lot, currentPrice, onSell, onDelete,
+  lot, currentPrice, onDelete,
 }: {
   lot: Investment;
   currentPrice: number | null;
-  onSell: () => void;
   onDelete: () => void;
 }) {
   const cost  = lot.buy_price * lot.quantity;
@@ -561,12 +627,9 @@ function LotRow({
           </p>
         )}
       </div>
-      <div className="flex gap-1">
-        <Button variant="outline" size="sm" className="h-6 text-[10px] px-2" onClick={onSell}>Vender</Button>
-        <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={onDelete}>
-          <Trash2 className="h-3 w-3" />
-        </Button>
-      </div>
+      <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive shrink-0" onClick={onDelete}>
+        <Trash2 className="h-3 w-3" />
+      </Button>
     </div>
   );
 }
