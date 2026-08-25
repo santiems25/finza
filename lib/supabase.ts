@@ -193,6 +193,16 @@ export async function deleteExpense(id: string) {
   if (error) throw error;
 }
 
+export async function updateExpenseReimbursement(
+  id: string, reimbursed_amount: number | null, reimbursed_account_id: string | null
+): Promise<void> {
+  const { error } = await supabase
+    .from("expenses")
+    .update({ reimbursed_amount, reimbursed_account_id })
+    .eq("id", id);
+  if (error) throw error;
+}
+
 // ─── Billing Payments ─────────────────────────────────────────────────────────
 
 export async function getBillingPayments(): Promise<BillingPayment[]> {

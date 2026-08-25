@@ -3,11 +3,13 @@
 import { useEffect, useState, useCallback } from "react";
 import {
   ChevronLeft, ChevronRight, ChevronDown, ChevronUp, CreditCard, CheckCircle2,
-  Clock, Wallet, Plus, Trash2, TrendingUp, TrendingDown, Calendar,
+  Clock, Wallet, Plus, Trash2, TrendingUp, TrendingDown, Calendar, Users,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
@@ -16,9 +18,9 @@ import {
 import {
   getCreditCards, getExpenses, getIncomes, deleteIncome, deleteExpense,
   getBillingPayments, markBillingAsPaid, unmarkBillingAsPaid,
-  getCustomCategories, getMonthlyConfigs, getAccounts,
+  getCustomCategories, getMonthlyConfigs, getAccounts, updateExpenseReimbursement,
 } from "@/lib/supabase";
-import { formatCurrency, formatDate, getMonthName, getCategoryMeta, getDueDate } from "@/lib/utils";
+import { formatCurrency, formatDate, getMonthName, getCategoryMeta, getDueDate, parseAmount } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { IncomeForm } from "./income-form";
 import { ExpenseForm } from "@/components/gastos/expense-form";
@@ -60,6 +62,7 @@ export function DashboardContent() {
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [movementsExpanded, setMovementsExpanded] = useState(false);
+  const [reimbursingExpense, setReimbursingExpense] = useState<Expense | null>(null);
 
   const [expenses,        setExpenses]        = useState<Expense[]>([]);
   const [incomes,         setIncomes]         = useState<Income[]>([]);
@@ -115,8 +118,8 @@ export function DashboardContent() {
     return d.getMonth() === viewMonth && d.getFullYear() === viewYear;
   });
 
-  const totalExpARS = monthExpenses.filter(e => e.currency === "ARS").reduce((s, e) => s + e.amount, 0);
-  const totalExpUSD = monthExpenses.filter(e => e.currency === "USD").reduce((s, e) => s + e.amount, 0);
+  const totalExpARS = monthExpenses.filter(e => e.currency === "ARS").reduce((s, e) => s + personalAmount(e), 0);
+  const totalExpUSD = monthExpenses.filter(e => e.currency === "USD").reduce((s, e) => s + personalAmount(e), 0);
   const hasUSD = totalExpUSD > 0 || monthIncomes.some(i => i.currency === "USD");
 
   const activeCurrency = hasUSD ? summaryCurrency : "ARS";
@@ -129,7 +132,7 @@ export function DashboardContent() {
   // Monto protagonista: si hay filtro de categoría activo, mostrar solo esa categoría
   const filteredCategoryMeta = categoryFilter ? getCategoryMeta(categoryFilter, customCategories) : null;
   const heroTotal = categoryFilter
-    ? monthExpenses.filter(e => e.currency === activeCurrency && e.category === categoryFilter).reduce((s, e) => s + e.amount, 0)
+    ? monthExpenses.filter(e => e.currency === activeCurrency && e.category === categoryFilter).reduce((s, e) => s + personalAmount(e), 0)
     : totalExp;
 
   // ── TC ──────────────────────────────────────────────────────────────────────
@@ -188,6 +191,14 @@ export function DashboardContent() {
   const handleDeleteExpense = async (id: string) => {
     await deleteExpense(id);
     toast({ title: "Gasto eliminado" });
+    load();
+  };
+
+  const handleSaveReimbursement = async (amount: number | null, accountId: string | null) => {
+    if (!reimbursingExpense) return;
+    await updateExpenseReimbursement(reimbursingExpense.id, amount, accountId);
+    setReimbursingExpense(null);
+    toast({ title: amount ? "✅ Reembolso registrado" : "Reembolso eliminado" });
     load();
   };
 
@@ -351,7 +362,7 @@ export function DashboardContent() {
               {movements.slice(0, visibleMovements).map((m, i) => (
                 <div key={`${m.kind}-${m.id}`}>
                   {m.kind === "expense"
-                    ? <ExpenseRow expense={m.data} cards={cards} customCategories={customCategories} onDelete={handleDeleteExpense} />
+                    ? <ExpenseRow expense={m.data} cards={cards} customCategories={customCategories} onDelete={handleDeleteExpense} onReimburse={setReimbursingExpense} />
                     : <IncomeRow income={m.data} onDelete={handleDeleteIncome} />}
                   {i < Math.min(movements.length, visibleMovements) - 1 && <Separator />}
                 </div>
@@ -419,7 +430,120 @@ export function DashboardContent() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* ── Dialog registrar reembolso ── */}
+      <Dialog open={!!reimbursingExpense} onOpenChange={open => { if (!open) setReimbursingExpense(null); }}>
+        <DialogContent className="max-w-sm mx-auto">
+          <DialogHeader>
+            <DialogTitle>Registrar reembolso</DialogTitle>
+          </DialogHeader>
+          {reimbursingExpense && (
+            <ReimbursementForm
+              expense={reimbursingExpense}
+              accounts={accounts}
+              onSave={handleSaveReimbursement}
+              onCancel={() => setReimbursingExpense(null)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
+  );
+}
+
+// ─── ReimbursementForm ────────────────────────────────────────────────────────
+
+function ReimbursementForm({
+  expense, accounts, onSave, onCancel,
+}: {
+  expense: Expense;
+  accounts: Account[];
+  onSave: (amount: number | null, accountId: string | null) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [amount, setAmount]       = useState(expense.reimbursed_amount?.toString() ?? "");
+  const [accountId, setAccountId] = useState(expense.reimbursed_account_id ?? accounts[0]?.id ?? "");
+  const [saving, setSaving]       = useState(false);
+
+  const parsedAmount = parseAmount(amount);
+  const maxAmount    = expense.amount;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (parsedAmount <= 0 || !accountId) return;
+    setSaving(true);
+    try {
+      await onSave(parsedAmount, accountId);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleRemove = async () => {
+    setSaving(true);
+    try {
+      await onSave(null, null);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="rounded-lg bg-muted/40 px-3 py-2.5 text-xs text-muted-foreground">
+        {expense.description} · Total {formatCurrency(expense.amount, expense.currency)}
+      </div>
+
+      <div>
+        <Label className="text-xs mb-1.5 block">Cuánto te transfirieron</Label>
+        <Input
+          type="text"
+          inputMode="decimal"
+          placeholder="0"
+          value={amount}
+          onChange={e => setAmount(e.target.value)}
+          autoFocus
+        />
+        {parsedAmount > maxAmount && (
+          <p className="text-[10px] text-amber-500 mt-1">
+            Es más que el total del gasto ({formatCurrency(maxAmount, expense.currency)})
+          </p>
+        )}
+      </div>
+
+      {accounts.length > 0 && (
+        <div>
+          <Label className="text-xs mb-1.5 block">A qué cuenta</Label>
+          <Select value={accountId} onValueChange={setAccountId}>
+            <SelectTrigger><SelectValue placeholder="Elegí una cuenta" /></SelectTrigger>
+            <SelectContent>
+              {accounts.map(a => (
+                <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      <div className="flex gap-2">
+        <Button type="submit" className="flex-1" disabled={saving || parsedAmount <= 0 || !accountId}>
+          {saving ? "Guardando..." : "Guardar"}
+        </Button>
+        <Button type="button" variant="outline" onClick={onCancel} disabled={saving}>
+          Cancelar
+        </Button>
+      </div>
+      {expense.reimbursed_amount != null && (
+        <button
+          type="button"
+          onClick={handleRemove}
+          disabled={saving}
+          className="w-full text-xs text-muted-foreground hover:text-destructive transition-colors"
+        >
+          Quitar reembolso
+        </button>
+      )}
+    </form>
   );
 }
 
@@ -590,15 +714,19 @@ function ExpenseDonutChart({
 // ─── ExpenseRow / IncomeRow ───────────────────────────────────────────────────
 
 function ExpenseRow({
-  expense, cards, customCategories, onDelete,
+  expense, cards, customCategories, onDelete, onReimburse,
 }: {
   expense: Expense;
   cards: CreditCardType[];
   customCategories: ExpenseCustomCategory[];
   onDelete: (id: string) => void;
+  onReimburse: (e: Expense) => void;
 }) {
   const card = cards.find(c => c.id === expense.credit_card_id);
   const { icon, label, bg, text } = getCategoryMeta(expense.category, customCategories);
+  const isCredit = expense.payment_method === "credito";
+  const hasReimbursement = !!expense.reimbursed_amount;
+  const personal = personalAmount(expense);
   return (
     <div className="flex items-center gap-3 px-4 py-3">
       <div className={`h-9 w-9 rounded-xl flex items-center justify-center shrink-0 text-base ${bg}`}>
@@ -620,11 +748,26 @@ function ExpenseRow({
             </span>
           )}
           {card && <span className="text-[10px] text-muted-foreground">· {card.name}</span>}
+          {hasReimbursement && (
+            <span className="text-[10px] text-emerald-600">
+              · Te reembolsaron {formatCurrency(expense.reimbursed_amount!, expense.currency)}
+            </span>
+          )}
         </div>
       </div>
       <span className={`text-sm font-semibold shrink-0 ${expense.currency === "USD" ? "text-emerald-500" : ""}`}>
-        −{formatCurrency(expense.amount, expense.currency)}
+        −{formatCurrency(personal, expense.currency)}
       </span>
+      {isCredit && (
+        <Button
+          variant="ghost" size="icon"
+          className={`h-7 w-7 shrink-0 ${hasReimbursement ? "text-emerald-600" : "text-muted-foreground hover:text-foreground"}`}
+          onClick={() => onReimburse(expense)}
+          title="Registrar reembolso"
+        >
+          <Users className="h-3.5 w-3.5" />
+        </Button>
+      )}
       <Button
         variant="ghost" size="icon"
         className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0 -mr-1"
@@ -767,10 +910,15 @@ function BillingCard({
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+/** Gasto "personal" de un movimiento: el total menos lo que ya te reembolsaron. */
+function personalAmount(e: Expense): number {
+  return Math.max(0, e.amount - (e.reimbursed_amount ?? 0));
+}
+
 function getCategoryTotals(expenses: Expense[]) {
   const map   = new Map<string, number>();
-  const total = expenses.reduce((s, e) => s + e.amount, 0);
-  for (const e of expenses) map.set(e.category, (map.get(e.category) ?? 0) + e.amount);
+  const total = expenses.reduce((s, e) => s + personalAmount(e), 0);
+  for (const e of expenses) map.set(e.category, (map.get(e.category) ?? 0) + personalAmount(e));
   return Array.from(map.entries())
     .map(([category, t]) => ({ category, total: t, percent: total > 0 ? (t / total) * 100 : 0 }))
     .sort((a, b) => b.total - a.total);

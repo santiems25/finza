@@ -163,6 +163,9 @@ export default function InversionesPage() {
 
   // ── Plata disponible en la cuenta de Inversiones (sin invertir) ────────────
   const totalEverInvested = investments.reduce((s, i) => s + i.buy_price * i.quantity, 0);
+  // Rendimiento total = todo lo ganado desde que empezaste a invertir, sobre
+  // todo lo que invertiste alguna vez (activo + vendido)
+  const totalPnLPct      = totalEverInvested > 0 ? (totalPnL / totalEverInvested) * 100 : 0;
   const totalSaleProceeds = soldLots.reduce((s, l) => s + (l.sell_price ?? 0) * l.quantity, 0);
 
   let cashArs = investmentAccount?.initial_ars ?? 0;
@@ -191,7 +194,7 @@ export default function InversionesPage() {
   const spyPct = spyCurrent != null && spyStart != null && spyStart > 0
     ? ((spyCurrent - spyStart) / spyStart) * 100
     : null;
-  const portfolioBeatsSpy = spyPct != null && unrealizedPnLPct > spyPct;
+  const portfolioBeatsSpy = spyPct != null && totalPnLPct > spyPct;
 
   // ── Filtros aplicados ─────────────────────────────────────────────────────
   const filteredPositions = positions.filter(
@@ -271,6 +274,7 @@ export default function InversionesPage() {
             realizedPnL={realizedPnL}
             totalDividends={totalDividends}
             totalPnL={totalPnL}
+            totalPnLPct={totalPnLPct}
             spyPct={spyPct}
             portfolioBeatsSpy={portfolioBeatsSpy}
             activeCount={positions.length}
@@ -383,33 +387,34 @@ export default function InversionesPage() {
 
 function PortfolioDashboard({
   totalCost, totalValue, unrealizedPnL, unrealizedPnLPct,
-  realizedPnL, totalDividends, totalPnL, spyPct, portfolioBeatsSpy, activeCount, soldCount,
+  realizedPnL, totalDividends, totalPnL, totalPnLPct, spyPct, portfolioBeatsSpy, activeCount, soldCount,
 }: {
   totalCost: number; totalValue: number;
   unrealizedPnL: number; unrealizedPnLPct: number;
-  realizedPnL: number; totalDividends: number; totalPnL: number;
+  realizedPnL: number; totalDividends: number; totalPnL: number; totalPnLPct: number;
   spyPct: number | null; portfolioBeatsSpy: boolean;
   activeCount: number; soldCount: number;
 }) {
-  const isUp = unrealizedPnL >= 0;
+  const isUp = totalPnL >= 0;
+  const isUnrealizedUp = unrealizedPnL >= 0;
 
   return (
     <Card className={`rounded-2xl shadow-none ${isUp ? "border-emerald-500/20" : "border-destructive/20"}`}>
       <CardContent className="p-5 space-y-4">
-        {/* P&L no realizado — cifra protagonista */}
+        {/* Rendimiento total (no realizado + realizado + dividendos) — cifra protagonista */}
         <div>
           <p className="text-[11px] text-muted-foreground uppercase tracking-wider font-medium mb-1">
-            No realizado
+            Rendimiento total
           </p>
           <div className="flex items-baseline gap-2 flex-wrap">
             <span
               className={`text-[2.25rem] leading-tight font-bold tracking-tight ${isUp ? "text-emerald-500" : "text-destructive"}`}
               style={{ fontFamily: "ui-rounded, 'SF Pro Rounded', system-ui, sans-serif" }}
             >
-              {isUp ? "+" : ""}{formatCurrency(unrealizedPnL, "USD")}
+              {isUp ? "+" : ""}{formatCurrency(totalPnL, "USD")}
             </span>
             <span className={`text-sm font-medium ${isUp ? "text-emerald-500" : "text-destructive"}`}>
-              ({isUp ? "+" : ""}{unrealizedPnLPct.toFixed(2)}%)
+              ({isUp ? "+" : ""}{totalPnLPct.toFixed(2)}%)
             </span>
           </div>
         </div>
@@ -428,8 +433,14 @@ function PortfolioDashboard({
           </div>
         </div>
 
-        {/* P&L realizado + dividendos + SPY benchmark */}
+        {/* No realizado + realizado + dividendos + SPY benchmark */}
         <div className="grid grid-cols-2 gap-3">
+          <div className="rounded-lg bg-muted/40 px-3 py-2">
+            <p className="text-[10px] text-muted-foreground mb-0.5">No realizado</p>
+            <p className={`text-sm font-semibold ${isUnrealizedUp ? "text-emerald-500" : "text-destructive"}`}>
+              {isUnrealizedUp ? "+" : ""}{formatCurrency(unrealizedPnL, "USD")}
+            </p>
+          </div>
           {soldCount > 0 && (
             <div className="rounded-lg bg-muted/40 px-3 py-2">
               <p className="text-[10px] text-muted-foreground mb-0.5">Realizado</p>
@@ -456,20 +467,12 @@ function PortfolioDashboard({
               </p>
               <div className="flex items-center gap-1.5 flex-wrap">
                 <span className={`text-sm font-semibold ${portfolioBeatsSpy ? "text-emerald-500" : "text-destructive"}`}>
-                  {unrealizedPnLPct.toFixed(1)}%
+                  {totalPnLPct.toFixed(1)}%
                 </span>
                 <span className="text-[10px] text-muted-foreground">
                   vs {spyPct.toFixed(1)}%
                 </span>
               </div>
-            </div>
-          )}
-          {(soldCount > 0 || totalDividends > 0) && (
-            <div className="rounded-lg bg-primary/10 border border-primary/20 px-3 py-2 col-span-2">
-              <p className="text-[10px] text-muted-foreground mb-0.5">Total (no real. + real. + dividendos)</p>
-              <p className={`text-sm font-semibold ${totalPnL >= 0 ? "text-emerald-500" : "text-destructive"}`}>
-                {totalPnL >= 0 ? "+" : ""}{formatCurrency(totalPnL, "USD")}
-              </p>
             </div>
           )}
         </div>

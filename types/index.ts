@@ -59,6 +59,10 @@ export interface Expense {
   total_installments: number;    // 1 = pago único
   installment_number: number;    // 1-based
   is_recurring: boolean;
+  // Gastos compartidos: lo que te reembolsaron y a qué cuenta.
+  // El gasto "personal" (para Inicio) = amount - reimbursed_amount.
+  reimbursed_amount: number | null;
+  reimbursed_account_id: string | null;
   notes: string | null;
   created_at: string;
 }

@@ -129,6 +129,8 @@ export function ExpenseForm({ cards, monthlyConfigs, accounts, customCategories,
           total_installments: isRecurring ? 1 : numCuotas,
           installment_number: isRecurring ? 1 : i + 1,
           is_recurring:       isRecurring,
+          reimbursed_amount:     null,
+          reimbursed_account_id: null,
           notes:              form.notes || null,
         };
       });

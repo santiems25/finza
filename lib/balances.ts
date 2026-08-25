@@ -53,6 +53,12 @@ export function accountBalance(account: Account, data: BalanceData): { ars: numb
     if (!belongsToAccount(e)) continue;
     if (e.currency === "ARS") ars -= e.amount; else usd -= e.amount;
   }
+  // Reembolsos de gastos compartidos: suman a la cuenta elegida sin generar
+  // un ingreso aparte (independiente de si el gasto pertenece a esta cuenta).
+  for (const e of expenses) {
+    if (e.reimbursed_account_id !== account.id || !e.reimbursed_amount) continue;
+    if (e.currency === "ARS") ars += e.reimbursed_amount; else usd += e.reimbursed_amount;
+  }
   for (const fx of fxTransactions) {
     if (fx.account_id !== account.id) continue;
     ars -= fx.ars_amount;
