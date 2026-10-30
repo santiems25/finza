@@ -161,15 +161,10 @@ export default function InversionesPage() {
   const totalValue       = positions.reduce((s, p) => s + (p.currentValue ?? p.totalCost), 0);
   const unrealizedPnL    = totalValue - totalCost;
   const unrealizedPnLPct = totalCost > 0 ? (unrealizedPnL / totalCost) * 100 : 0;
-  const realizedPnL      = soldLots.reduce((s, l) => s + l.realizedPnL, 0);
   const totalDividends   = dividends.reduce((s, d) => s + d.amount, 0);
-  const totalPnL         = unrealizedPnL + realizedPnL + totalDividends;
 
   // ── Plata disponible en la cuenta de Inversiones (sin invertir) ────────────
   const totalEverInvested = investments.reduce((s, i) => s + i.buy_price * i.quantity, 0);
-  // Rendimiento total = todo lo ganado desde que empezaste a invertir, sobre
-  // todo lo que invertiste alguna vez (activo + vendido)
-  const totalPnLPct      = totalEverInvested > 0 ? (totalPnL / totalEverInvested) * 100 : 0;
 
   // Todas las compras/ventas se pagan/cobran en pesos a la cotización MEP
   // vigente en el momento (guardada en buy_rate/sell_rate de cada lote).
@@ -207,6 +202,14 @@ export default function InversionesPage() {
   // "Valor en moneda" dolarizado al MEP — es lo que efectivamente tenés
   // disponible sin invertir (incluye lo que vendiste y no reinvertiste).
   const cashValueUsd = cashUsd + (mepRate ? cashArs / mepRate : 0);
+
+  // Rendimiento total = no realizado (lo que tenés invertido hoy) + realizado
+  // (la plata disponible real, dolarizada — ya incluye dividendos). Usamos
+  // esto en vez del P&L histórico de ventas, que se desvirtuaba al reinvertir.
+  const totalPnL    = unrealizedPnL + cashValueUsd;
+  // Rendimiento total % = todo lo ganado desde que empezaste a invertir, sobre
+  // todo lo que invertiste alguna vez (activo + vendido)
+  const totalPnLPct = totalEverInvested > 0 ? (totalPnL / totalEverInvested) * 100 : 0;
 
   // Benchmark SPY
   const spyPct = spyCurrent != null && spyStart != null && spyStart > 0
