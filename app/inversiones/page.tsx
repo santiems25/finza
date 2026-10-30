@@ -161,6 +161,7 @@ export default function InversionesPage() {
   const totalValue       = positions.reduce((s, p) => s + (p.currentValue ?? p.totalCost), 0);
   const unrealizedPnL    = totalValue - totalCost;
   const unrealizedPnLPct = totalCost > 0 ? (unrealizedPnL / totalCost) * 100 : 0;
+  const realizedPnL      = soldLots.reduce((s, l) => s + l.realizedPnL, 0);
   const totalDividends   = dividends.reduce((s, d) => s + d.amount, 0);
 
   // ── Plata disponible en la cuenta de Inversiones (sin invertir) ────────────
@@ -199,14 +200,9 @@ export default function InversionesPage() {
 
   const sourceAccounts = accounts.filter(a => a.account_type !== "investment");
 
-  // "Valor en moneda" dolarizado al MEP — es lo que efectivamente tenés
-  // disponible sin invertir (incluye lo que vendiste y no reinvertiste).
-  const cashValueUsd = cashUsd + (mepRate ? cashArs / mepRate : 0);
-
-  // Rendimiento total = no realizado (lo que tenés invertido hoy) + realizado
-  // (la plata disponible real, dolarizada — ya incluye dividendos). Usamos
-  // esto en vez del P&L histórico de ventas, que se desvirtuaba al reinvertir.
-  const totalPnL    = unrealizedPnL + cashValueUsd;
+  // Rendimiento total = no realizado + realizado (ganancia booked al vender,
+  // sin importar si reinvertiste) + dividendos
+  const totalPnL    = unrealizedPnL + realizedPnL + totalDividends;
   // Rendimiento total % = todo lo ganado desde que empezaste a invertir, sobre
   // todo lo que invertiste alguna vez (activo + vendido)
   const totalPnLPct = totalEverInvested > 0 ? (totalPnL / totalEverInvested) * 100 : 0;
@@ -292,7 +288,7 @@ export default function InversionesPage() {
             totalValue={totalValue}
             unrealizedPnL={unrealizedPnL}
             unrealizedPnLPct={unrealizedPnLPct}
-            cashValueUsd={cashValueUsd}
+            realizedPnL={realizedPnL}
             totalDividends={totalDividends}
             totalPnL={totalPnL}
             totalPnLPct={totalPnLPct}
@@ -420,11 +416,11 @@ export default function InversionesPage() {
 
 function PortfolioDashboard({
   totalCost, totalValue, unrealizedPnL, unrealizedPnLPct,
-  cashValueUsd, totalDividends, totalPnL, totalPnLPct, spyPct, portfolioBeatsSpy, activeCount, soldCount,
+  realizedPnL, totalDividends, totalPnL, totalPnLPct, spyPct, portfolioBeatsSpy, activeCount, soldCount,
 }: {
   totalCost: number; totalValue: number;
   unrealizedPnL: number; unrealizedPnLPct: number;
-  cashValueUsd: number; totalDividends: number; totalPnL: number; totalPnLPct: number;
+  realizedPnL: number; totalDividends: number; totalPnL: number; totalPnLPct: number;
   spyPct: number | null; portfolioBeatsSpy: boolean;
   activeCount: number; soldCount: number;
 }) {
@@ -474,12 +470,14 @@ function PortfolioDashboard({
               {isUnrealizedUp ? "+" : ""}{formatCurrency(unrealizedPnL, "USD")}
             </p>
           </div>
-          <div className="rounded-lg bg-muted/40 px-3 py-2">
-            <p className="text-[10px] text-muted-foreground mb-0.5">Realizado</p>
-            <p className="text-sm font-semibold">
-              {formatCurrency(cashValueUsd, "USD")}
-            </p>
-          </div>
+          {soldCount > 0 && (
+            <div className="rounded-lg bg-muted/40 px-3 py-2">
+              <p className="text-[10px] text-muted-foreground mb-0.5">Realizado</p>
+              <p className={`text-sm font-semibold ${realizedPnL >= 0 ? "text-emerald-500" : "text-destructive"}`}>
+                {realizedPnL >= 0 ? "+" : ""}{formatCurrency(realizedPnL, "USD")}
+              </p>
+            </div>
+          )}
           {totalDividends > 0 && (
             <div className="rounded-lg bg-muted/40 px-3 py-2">
               <p className="text-[10px] text-muted-foreground mb-0.5">Dividendos</p>
