@@ -13,7 +13,8 @@ export async function sellFifo(
   lots: Investment[],
   quantity: number,
   sellPrice: number,
-  sellDate: string
+  sellDate: string,
+  sellRate: number | null = null
 ): Promise<void> {
   const sorted = [...lots].sort((a, b) => a.buy_date.localeCompare(b.buy_date));
   let remaining = quantity;
@@ -23,7 +24,7 @@ export async function sellFifo(
 
     if (lot.quantity <= remaining + EPSILON) {
       // Se vende el lote completo
-      await sellInvestment(lot.id, sellPrice, sellDate);
+      await sellInvestment(lot.id, sellPrice, sellDate, sellRate);
       remaining -= lot.quantity;
     } else {
       // Venta parcial: se reduce el lote original y se registra la porción vendida
@@ -38,6 +39,8 @@ export async function sellFifo(
         is_sold:             true,
         sell_price:          sellPrice,
         sell_date:           sellDate,
+        buy_rate:            lot.buy_rate,
+        sell_rate:           sellRate,
         notes:               lot.notes,
       });
       remaining = 0;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { ArrowDownToLine, RefreshCw } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,26 +19,27 @@ interface Props {
   investmentAccountId: string;
   cashArs: number;
   cashUsd: number;
+  mepRate: number | null;
   onAddTransfer: (t: Omit<AccountTransfer, "id" | "created_at">) => Promise<void>;
 }
 
 export function InvestmentAccountCard({
-  sourceAccounts, investmentAccountId, cashArs, cashUsd, onAddTransfer,
+  sourceAccounts, investmentAccountId, cashArs, cashUsd, mepRate: mepRateProp, onAddTransfer,
 }: Props) {
   const [open, setOpen] = useState(false);
-  const [mepRate, setMepRate] = useState<number | null>(null);
+  const [localMep, setLocalMep] = useState<number | null>(null);
   const [loadingMep, setLoadingMep] = useState(false);
+
+  const mepRate = localMep ?? mepRateProp;
 
   const loadMep = async () => {
     setLoadingMep(true);
     try {
-      setMepRate(await fetchMepRate());
+      setLocalMep(await fetchMepRate());
     } finally {
       setLoadingMep(false);
     }
   };
-
-  useEffect(() => { loadMep(); }, []);
 
   // Todo el "valor en moneda" expresado en dólares (los pesos se dolarizan
   // al MEP), para poder compararlo de una con el resto del portafolio.

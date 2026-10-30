@@ -20,6 +20,7 @@ import {
   getFxTransactions,
 } from "@/lib/supabase";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { fetchMepRate } from "@/lib/mep";
 import { useToast } from "@/hooks/use-toast";
 import type {
   Investment, Position, SoldLot, AssetType, Dividend, Account, AccountTransfer, FxTransaction,
@@ -90,7 +91,10 @@ export default function InversionesPage() {
   const [accounts, setAccounts]         = useState<Account[]>([]);
   const [transfers, setTransfers]       = useState<AccountTransfer[]>([]);
   const [fxTxs, setFxTxs]               = useState<FxTransaction[]>([]);
+  const [mepRate, setMepRate]           = useState<number | null>(null);
   const { toast } = useToast();
+
+  useEffect(() => { fetchMepRate().then(setMepRate); }, []);
 
   const investmentAccount = accounts.find(a => a.account_type === "investment") ?? null;
 
@@ -166,7 +170,15 @@ export default function InversionesPage() {
   // Rendimiento total = todo lo ganado desde que empezaste a invertir, sobre
   // todo lo que invertiste alguna vez (activo + vendido)
   const totalPnLPct      = totalEverInvested > 0 ? (totalPnL / totalEverInvested) * 100 : 0;
-  const totalSaleProceeds = soldLots.reduce((s, l) => s + (l.sell_price ?? 0) * l.quantity, 0);
+
+  // Todas las compras/ventas se pagan/cobran en pesos a la cotización MEP
+  // vigente en el momento (guardada en buy_rate/sell_rate de cada lote).
+  const totalBoughtArs = investments.reduce(
+    (s, i) => s + (i.buy_rate ? i.buy_price * i.quantity * i.buy_rate : 0), 0
+  );
+  const totalSoldArs = soldLots.reduce(
+    (s, l) => s + (l.sell_rate ? (l.sell_price ?? 0) * l.quantity * l.sell_rate : 0), 0
+  );
 
   let cashArs = investmentAccount?.initial_ars ?? 0;
   let cashUsd = investmentAccount?.initial_usd ?? 0;
@@ -179,6 +191,7 @@ export default function InversionesPage() {
         if (t.currency === "ARS") cashArs -= t.amount; else cashUsd -= t.amount;
       }
     }
+    // Legado: conversiones hechas antes de pasar a pagar siempre en pesos
     for (const fx of fxTxs) {
       if (fx.account_id === investmentAccount.id) {
         cashArs -= fx.ars_amount;
@@ -186,9 +199,14 @@ export default function InversionesPage() {
       }
     }
   }
-  cashUsd += totalSaleProceeds + totalDividends - totalEverInvested;
+  cashArs += totalSoldArs - totalBoughtArs;
+  cashUsd += totalDividends;
 
   const sourceAccounts = accounts.filter(a => a.account_type !== "investment");
+
+  // "Valor en moneda" dolarizado al MEP — es lo que efectivamente tenés
+  // disponible sin invertir (incluye lo que vendiste y no reinvertiste).
+  const cashValueUsd = cashUsd + (mepRate ? cashArs / mepRate : 0);
 
   // Benchmark SPY
   const spyPct = spyCurrent != null && spyStart != null && spyStart > 0
@@ -239,7 +257,6 @@ export default function InversionesPage() {
             <DialogContent className="max-w-sm mx-auto max-h-[90vh] overflow-y-auto">
               <DialogHeader><DialogTitle>Registrar compra</DialogTitle></DialogHeader>
               <InvestmentForm
-                investmentAccountId={investmentAccount?.id ?? null}
                 availableArs={cashArs}
                 onSaved={handleSaved}
               />
@@ -258,6 +275,7 @@ export default function InversionesPage() {
                 investmentAccountId={investmentAccount.id}
                 cashArs={cashArs}
                 cashUsd={cashUsd}
+                mepRate={mepRate}
                 onAddTransfer={async (t) => { await addTransfer(t); load(); }}
               />
             </div>
@@ -271,7 +289,7 @@ export default function InversionesPage() {
             totalValue={totalValue}
             unrealizedPnL={unrealizedPnL}
             unrealizedPnLPct={unrealizedPnLPct}
-            realizedPnL={realizedPnL}
+            cashValueUsd={cashValueUsd}
             totalDividends={totalDividends}
             totalPnL={totalPnL}
             totalPnLPct={totalPnLPct}
@@ -288,6 +306,7 @@ export default function InversionesPage() {
               investmentAccountId={investmentAccount.id}
               cashArs={cashArs}
               cashUsd={cashUsd}
+                mepRate={mepRate}
               onAddTransfer={async (t) => { await addTransfer(t); load(); }}
             />
           )}
@@ -398,11 +417,11 @@ export default function InversionesPage() {
 
 function PortfolioDashboard({
   totalCost, totalValue, unrealizedPnL, unrealizedPnLPct,
-  realizedPnL, totalDividends, totalPnL, totalPnLPct, spyPct, portfolioBeatsSpy, activeCount, soldCount,
+  cashValueUsd, totalDividends, totalPnL, totalPnLPct, spyPct, portfolioBeatsSpy, activeCount, soldCount,
 }: {
   totalCost: number; totalValue: number;
   unrealizedPnL: number; unrealizedPnLPct: number;
-  realizedPnL: number; totalDividends: number; totalPnL: number; totalPnLPct: number;
+  cashValueUsd: number; totalDividends: number; totalPnL: number; totalPnLPct: number;
   spyPct: number | null; portfolioBeatsSpy: boolean;
   activeCount: number; soldCount: number;
 }) {
@@ -452,14 +471,12 @@ function PortfolioDashboard({
               {isUnrealizedUp ? "+" : ""}{formatCurrency(unrealizedPnL, "USD")}
             </p>
           </div>
-          {soldCount > 0 && (
-            <div className="rounded-lg bg-muted/40 px-3 py-2">
-              <p className="text-[10px] text-muted-foreground mb-0.5">Realizado</p>
-              <p className={`text-sm font-semibold ${realizedPnL >= 0 ? "text-emerald-500" : "text-destructive"}`}>
-                {realizedPnL >= 0 ? "+" : ""}{formatCurrency(realizedPnL, "USD")}
-              </p>
-            </div>
-          )}
+          <div className="rounded-lg bg-muted/40 px-3 py-2">
+            <p className="text-[10px] text-muted-foreground mb-0.5">Realizado</p>
+            <p className="text-sm font-semibold">
+              {formatCurrency(cashValueUsd, "USD")}
+            </p>
+          </div>
           {totalDividends > 0 && (
             <div className="rounded-lg bg-muted/40 px-3 py-2">
               <p className="text-[10px] text-muted-foreground mb-0.5">Dividendos</p>

@@ -1,13 +1,14 @@
 "use client";
 
-import { useState } from "react";
-import { TrendingUp, TrendingDown } from "lucide-react";
+import { useEffect, useState } from "react";
+import { TrendingUp, TrendingDown, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DialogFooter } from "@/components/ui/dialog";
 import { sellFifo, estimateFifoCost } from "@/lib/sell-fifo";
 import { formatCurrency, parseQuantity } from "@/lib/utils";
+import { fetchMepRate } from "@/lib/mep";
 import type { Position } from "@/types";
 
 interface Props {
@@ -23,15 +24,31 @@ export function SellDialog({ position, currentPrice, onSold, onCancel }: Props) 
   const [quantityStr, setQuantityStr] = useState(position.totalQty.toString());
   const [sellPrice,   setSellPrice]   = useState(currentPrice ? currentPrice.toFixed(2) : "");
   const [sellDate,    setSellDate]    = useState(today);
+  const [exchangeRate, setExchangeRate] = useState("");
+  const [loadingMep,  setLoadingMep]  = useState(false);
   const [saving,      setSaving]      = useState(false);
   const [error,       setError]       = useState<string | null>(null);
+
+  const loadMepRate = async () => {
+    setLoadingMep(true);
+    try {
+      const mep = await fetchMepRate();
+      if (mep) setExchangeRate(mep.toFixed(2));
+    } finally {
+      setLoadingMep(false);
+    }
+  };
+
+  useEffect(() => { loadMepRate(); }, []);
 
   const quantity = parseQuantity(quantityStr);
   const validQty = quantity != null && quantity > 0 && quantity <= position.totalQty + 1e-6;
 
   const cost       = validQty ? estimateFifoCost(position.lots, quantity!) : 0;
   const sprice     = parseFloat(sellPrice) || 0;
+  const rate       = parseFloat(exchangeRate) || 0;
   const proceeds   = validQty ? sprice * quantity! : 0;
+  const proceedsArs = rate > 0 ? proceeds * rate : 0;
   const pnl        = proceeds - cost;
   const pnlPct     = cost > 0 ? (pnl / cost) * 100 : 0;
   const isPositive = pnl >= 0;
@@ -39,10 +56,10 @@ export function SellDialog({ position, currentPrice, onSold, onCancel }: Props) 
   const handleSell = async () => {
     setError(null);
     if (!validQty) { setError(`Ingresá una cantidad entre 0 y ${position.totalQty}`); return; }
-    if (!sellPrice || !sellDate) return;
+    if (!sellPrice || !sellDate || rate <= 0) return;
     setSaving(true);
     try {
-      await sellFifo(position.lots, quantity!, parseFloat(sellPrice), sellDate);
+      await sellFifo(position.lots, quantity!, parseFloat(sellPrice), sellDate, rate);
       onSold();
     } finally {
       setSaving(false);
@@ -106,6 +123,34 @@ export function SellDialog({ position, currentPrice, onSold, onCancel }: Props) 
         />
       </div>
 
+      {/* Cotización MEP — el cobro se recibe en pesos */}
+      <div>
+        <div className="flex items-center justify-between mb-1.5">
+          <Label className="text-xs">Cotización MEP ($ por USD)</Label>
+          <button
+            type="button"
+            onClick={loadMepRate}
+            disabled={loadingMep}
+            className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <RefreshCw className={`h-3 w-3 ${loadingMep ? "animate-spin" : ""}`} />
+            {loadingMep ? "Buscando..." : "Actualizar"}
+          </button>
+        </div>
+        <Input
+          type="text"
+          placeholder="1150"
+          value={exchangeRate}
+          onChange={e => setExchangeRate(e.target.value)}
+          inputMode="decimal"
+        />
+        {rate > 0 && proceeds > 0 && (
+          <p className="text-[10px] text-muted-foreground mt-1">
+            Se acreditan {formatCurrency(proceedsArs, "ARS")} en tu cuenta de Inversiones
+          </p>
+        )}
+      </div>
+
       {error && <p className="text-xs text-destructive">{error}</p>}
 
       {/* Preview P&L */}
@@ -141,7 +186,7 @@ export function SellDialog({ position, currentPrice, onSold, onCancel }: Props) 
         <Button
           className="flex-1"
           onClick={handleSell}
-          disabled={!sellPrice || !sellDate || !validQty || saving}
+          disabled={!sellPrice || !sellDate || !validQty || rate <= 0 || saving}
         >
           {saving ? "Vendiendo..." : "Confirmar venta"}
         </Button>

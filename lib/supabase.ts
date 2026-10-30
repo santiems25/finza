@@ -383,11 +383,11 @@ export async function addInvestment(investment: Omit<Investment, "id" | "created
 }
 
 export async function sellInvestment(
-  id: string, sell_price: number, sell_date: string
+  id: string, sell_price: number, sell_date: string, sell_rate: number | null = null
 ): Promise<void> {
   const { error } = await supabase
     .from("investments")
-    .update({ is_sold: true, sell_price, sell_date })
+    .update({ is_sold: true, sell_price, sell_date, sell_rate })
     .eq("id", id);
   if (error) throw error;
 }

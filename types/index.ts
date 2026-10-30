@@ -136,6 +136,9 @@ export interface Investment {
   is_sold: boolean;
   sell_price: number | null;
   sell_date: string | null;
+  // Cotización MEP usada para pagar la compra / cobrar la venta en pesos
+  buy_rate: number | null;
+  sell_rate: number | null;
   notes: string | null;
   created_at: string;
 }

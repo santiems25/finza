@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,23 +8,21 @@ import { Label } from "@/components/ui/label";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { addInvestment, addFxTransaction } from "@/lib/supabase";
+import { addInvestment } from "@/lib/supabase";
 import { formatCurrency, parseAmount, parseQuantity } from "@/lib/utils";
 import { fetchMepRate } from "@/lib/mep";
 import type { AssetType } from "@/types";
 import { ASSET_TYPE_LABELS } from "@/types";
 
 interface Props {
-  investmentAccountId: string | null;
   availableArs: number;
   onSaved: () => void;
 }
 
 const today = new Date().toISOString().split("T")[0];
 
-export function InvestmentForm({ investmentAccountId, availableArs, onSaved }: Props) {
+export function InvestmentForm({ availableArs, onSaved }: Props) {
   const [saving, setSaving] = useState(false);
-  const [payWithArs, setPayWithArs] = useState(false);
   const [exchangeRate, setExchangeRate] = useState("");
   const [loadingMep, setLoadingMep] = useState(false);
   const [form, setForm] = useState({
@@ -49,7 +47,7 @@ export function InvestmentForm({ investmentAccountId, availableArs, onSaved }: P
 
   const rate    = parseAmount(exchangeRate);
   const arsCost = rate > 0 ? cost * rate : 0;
-  const notEnoughArs = payWithArs && arsCost > availableArs;
+  const notEnoughArs = rate > 0 && arsCost > availableArs;
 
   const loadMepRate = async () => {
     setLoadingMep(true);
@@ -61,30 +59,15 @@ export function InvestmentForm({ investmentAccountId, availableArs, onSaved }: P
     }
   };
 
-  const handleTogglePayWithArs = (checked: boolean) => {
-    setPayWithArs(checked);
-    if (checked && !exchangeRate) loadMepRate();
-  };
+  useEffect(() => { loadMepRate(); }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.ticker || !form.quantity || !form.buy_price) return;
     if (resolvedQty == null || resolvedQty <= 0) return;
-    if (payWithArs && (!investmentAccountId || rate <= 0)) return;
+    if (rate <= 0) return;
     setSaving(true);
     try {
-      if (payWithArs && investmentAccountId) {
-        // Conversión interna pesos→dólares dentro de la cuenta de inversiones
-        // (no se muestra en el historial de compras de dólares de Ahorro)
-        await addFxTransaction({
-          ars_amount:    arsCost,
-          usd_amount:    cost,
-          exchange_rate: rate,
-          date:          form.buy_date,
-          notes:         null,
-          account_id:    investmentAccountId,
-        });
-      }
       await addInvestment({
         ticker:     form.ticker.toUpperCase().trim(),
         asset_type: form.asset_type,
@@ -94,6 +77,8 @@ export function InvestmentForm({ investmentAccountId, availableArs, onSaved }: P
         is_sold:    false,
         sell_price: null,
         sell_date:  null,
+        buy_rate:   rate,
+        sell_rate:  null,
         notes:      form.notes || null,
       });
       onSaved();
@@ -179,74 +164,54 @@ export function InvestmentForm({ investmentAccountId, availableArs, onSaved }: P
         />
       </div>
 
+      {/* Cotización MEP — toda compra se paga en pesos */}
+      <div>
+        <div className="flex items-center justify-between mb-1.5">
+          <Label className="text-xs">Cotización MEP ($ por USD)</Label>
+          <button
+            type="button"
+            onClick={loadMepRate}
+            disabled={loadingMep}
+            className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <RefreshCw className={`h-3 w-3 ${loadingMep ? "animate-spin" : ""}`} />
+            {loadingMep ? "Buscando..." : "Actualizar"}
+          </button>
+        </div>
+        <Input
+          type="text"
+          placeholder="1150"
+          value={exchangeRate}
+          onChange={e => setExchangeRate(e.target.value)}
+          inputMode="decimal"
+          required
+        />
+      </div>
+
       {/* Preview */}
       {cost > 0 && (
-        <div className="rounded-lg bg-muted/50 px-3 py-2.5 flex items-center justify-between">
-          <span className="text-xs text-muted-foreground">Inversión total</span>
-          <span className="text-sm font-semibold">{formatCurrency(cost, "USD")}</span>
-        </div>
-      )}
-
-      {/* Pagar con pesos disponibles */}
-      {investmentAccountId && (
-        <div className="space-y-2">
-          <label className="flex items-start gap-2.5 rounded-lg bg-muted/40 px-3 py-2.5 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={payWithArs}
-              onChange={e => handleTogglePayWithArs(e.target.checked)}
-              className="mt-0.5 h-4 w-4 accent-[#2d5016]"
-            />
-            <span>
-              <span className="text-xs font-medium block">Pagar con pesos disponibles</span>
-              <span className="text-[11px] text-muted-foreground">
-                Convierte pesos de tu cuenta de Inversiones a dólares con la cotización del MEP
+        <div className="rounded-lg bg-muted/50 px-3 py-2.5 space-y-1.5">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">Inversión total</span>
+            <span className="text-sm font-semibold">{formatCurrency(cost, "USD")}</span>
+          </div>
+          {rate > 0 && (
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">Se descuentan en pesos</span>
+              <span className={`text-sm font-semibold ${notEnoughArs ? "text-destructive" : ""}`}>
+                {formatCurrency(arsCost, "ARS")}
               </span>
-            </span>
-          </label>
-
-          {payWithArs && (
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <Label className="text-xs">Cotización ($ por USD)</Label>
-                <button
-                  type="button"
-                  onClick={loadMepRate}
-                  disabled={loadingMep}
-                  className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  <RefreshCw className={`h-3 w-3 ${loadingMep ? "animate-spin" : ""}`} />
-                  {loadingMep ? "Buscando MEP..." : "Actualizar MEP"}
-                </button>
-              </div>
-              <Input
-                type="text"
-                placeholder="1150"
-                value={exchangeRate}
-                onChange={e => setExchangeRate(e.target.value)}
-                inputMode="decimal"
-              />
-              {rate > 0 && (
-                <div className={`rounded-lg px-3 py-2.5 mt-2 flex items-center justify-between ${
-                  notEnoughArs ? "bg-destructive/10 border border-destructive/20" : "bg-emerald-500/10 border border-emerald-500/20"
-                }`}>
-                  <span className="text-xs text-muted-foreground">Se descuentan</span>
-                  <span className={`text-sm font-semibold ${notEnoughArs ? "text-destructive" : ""}`}>
-                    {formatCurrency(arsCost, "ARS")}
-                  </span>
-                </div>
-              )}
-              {notEnoughArs && (
-                <p className="text-[10px] text-destructive mt-1">
-                  Disponible: {formatCurrency(availableArs, "ARS")}
-                </p>
-              )}
             </div>
+          )}
+          {notEnoughArs && (
+            <p className="text-[10px] text-destructive">
+              Disponible: {formatCurrency(availableArs, "ARS")}
+            </p>
           )}
         </div>
       )}
 
-      <Button type="submit" className="w-full" disabled={saving || (payWithArs && (rate <= 0))}>
+      <Button type="submit" className="w-full" disabled={saving || rate <= 0}>
         {saving ? "Guardando..." : "Registrar compra"}
       </Button>
     </form>
